@@ -14,6 +14,24 @@ class QuestionTypes(StrEnum):
     TRUE_FALSE = "TRUE_FALSE"
     ONE_WORD_ANS = "ONE_WORD_ANS"
     
+    @property
+    def is_objective(self) -> bool:
+        return self in (
+            QuestionTypes.MCQ,
+            QuestionTypes.FILL_IN_THE_BLANK,
+            QuestionTypes.MATCH_THE_COLUMN,
+            QuestionTypes.TRUE_FALSE,
+            QuestionTypes.ONE_WORD_ANS
+        )
+        
+    @property
+    def is_subjective(self) -> bool:
+        return self in (
+            QuestionTypes.TWO_MARK_ANS,
+            QuestionTypes.THREE_MARK_ANS,
+            QuestionTypes.FOUR_MARK_ANS
+        )
+
 
 # To store the user input from the form
 class PaperRequest(BaseModel):
@@ -22,11 +40,8 @@ class PaperRequest(BaseModel):
     standard: str
     difficulty: Literal["Easy", "Balanced", "Hard"]
     chapters : list[str]
-    question_count : dict[QuestionTypes, int]
-    
-    @property
-    def question_types(self) -> list[QuestionTypes]:
-        return list(self.question_count.keys())
+    objective_count: int = Field(default=0, description="Total number of objective questions to generate.")
+    subjective_count: int = Field(default=0, description="Total number of subjective questions to generate.")
     
         
 class Question(BaseModel):
@@ -48,4 +63,9 @@ class Question(BaseModel):
 
 
 class BatchOutput(BaseModel):
-    question_list : list[Question]
+    question_list : list[Question] = Field(
+        default=[],
+        description="List of questions generated.",
+        min_length=1,
+        max_length=20
+)

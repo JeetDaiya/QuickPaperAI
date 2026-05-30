@@ -70,6 +70,12 @@ def group_by_subtopic(chunks: list[dict], min_chars: int = 1500) -> list[dict]:
 
 
 
+def clean_latex(text: str) -> str:
+    if not isinstance(text, str):
+        return text
+    return text.replace('\r', '\\r').replace('\t', '\\t')
+
+
 def question_generator_node(state: ChapterState) -> dict:
     """
     Fetches chapter chunks, groups by sub-topic, and generates questions per topic group.
@@ -79,15 +85,57 @@ def question_generator_node(state: ChapterState) -> dict:
     
     chapter = state["chapter"]
     subject = state["subject"]
+    objective_count = state["objective_count"]
+    subjective_count = state["subjective_count"]
     
     chapter_chunks = get_chapter_chunks(subject=subject, chapter=chapter)
     topic_batches = group_by_subtopic(chapter_chunks)
     
     print(f"[{chapter}] {len(chapter_chunks)} chunks → {len(topic_batches)} topic batches")
     
+    # ── Formulate dynamic quota instructions to preserve variance and coverage ──
+    if subjective_count > 0:
+        # Calculate strict quotas in Python (LLMs are bad at math, do it for them)
+        four_mark_count = max(1, subjective_count // 3) if subjective_count >= 3 else 0
+        three_mark_count = max(1, (subjective_count - four_mark_count) // 2) if subjective_count >= 2 else (1 if subjective_count == 1 else 0)
+        two_mark_count = subjective_count - four_mark_count - three_mark_count
+
+        subjective_breakdown_str = (
+            f"EXACT DISTRIBUTION REQUIRED:\n"
+            f"- Exactly {four_mark_count} questions MUST be 4_MARKS (Long Answer/Case Study)\n"
+            f"- Exactly {three_mark_count} questions MUST be 3_MARKS (System/Process Explanations)\n"
+            f"- Exactly {two_mark_count} questions MUST be 2_MARKS (Differences/Short Conceptual)\n"
+        )
+    else:
+        subjective_breakdown_str = ""
+
+    # Now build your final prompt strings
+    if objective_count > 0 and subjective_count > 0:
+        quota_instructions = (
+            f"Please generate EXACTLY {objective_count} objective questions (MCQ, Fill in blank, Match, T/F) and "
+            f"EXACTLY {subjective_count} subjective questions based strictly on this textbook content. "
+            f"Ensure all topics are covered evenly.\n\n{subjective_breakdown_str}"
+        )
+    elif objective_count > 0:
+        quota_instructions = (
+            f"Please generate EXACTLY {objective_count} objective questions (MCQ, Fill in blank, Match, T/F) based strictly "
+            "on this textbook content. Do NOT generate any subjective (2_MARKS, 3_MARKS, or 4_MARKS) questions."
+        )
+    elif subjective_count > 0:
+        quota_instructions = (
+            f"Please generate EXACTLY {subjective_count} subjective questions based strictly on this textbook content. "
+            f"Do NOT generate any objective questions.\n\n{subjective_breakdown_str}"
+        )
+    else:
+        quota_instructions = "Please generate 2-3 standard-compliant questions based strictly on this textbook content."
+
     generator_prompt = ChatPromptTemplate([
         ("system", QUESTION_GENERATOR_SYSTEM_PROMPT),
-        ("human", "TEXTBOOK CONTENT:\n{formatted_chunks}\n\nPREVIOUSLY GENERATED QUESTIONS (avoid repeating these):\n{previous_questions}")
+        ("human", (
+            "TEXTBOOK CONTENT:\n{formatted_chunks}\n\n"
+            "PREVIOUSLY GENERATED QUESTIONS (avoid repeating these):\n{previous_questions}\n\n"
+            "REQUIRED QUESTION TYPES TO GENERATE:\n{required_quota_instructions}"
+        ))
     ])
 
     generator_chain = generator_prompt | generator_model
@@ -100,7 +148,8 @@ def question_generator_node(state: ChapterState) -> dict:
         try:
             batch_output = generator_chain.invoke({
                 "formatted_chunks": batch["content"],
-                "previous_questions": previous_question
+                "previous_questions": previous_question,
+                "required_quota_instructions": quota_instructions
             })
             question_list.extend(batch_output.question_list)
         except Exception as e:
@@ -108,7 +157,14 @@ def question_generator_node(state: ChapterState) -> dict:
         
         time.sleep(5)
 
-    
+    # ── Post-process to fix LaTeX carriage return/tab JSON decoding issues system-wide ──
+    for q in question_list:
+        q.question_text = clean_latex(q.question_text)
+        if q.options:
+            q.options = [clean_latex(opt) for opt in q.options]
+        q.correct_answer = clean_latex(q.correct_answer)
+        q.answer = clean_latex(q.answer)
+
     return {
         "all_questions" : question_list
     }
@@ -120,8 +176,16 @@ def router_node(state: PaperState):
     
     chapter_list = state["paper_request"].chapters
     subject = state["paper_request"].subject
+    objective_count = state["paper_request"].objective_count
+    subjective_count = state["paper_request"].subjective_count
+    
     return [
-        Send(node="question_generator_node", arg={"chapter": chapter, "subject": subject})
+        Send(node="question_generator_node", arg={
+            "chapter": chapter,
+            "subject": subject,
+            "objective_count": objective_count,
+            "subjective_count": subjective_count
+        })
         for chapter in chapter_list
     ]
     

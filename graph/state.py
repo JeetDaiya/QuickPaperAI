@@ -11,4 +11,5 @@ class PaperState(TypedDict):
 class ChapterState(TypedDict):
     chapter: str
     subject: str
-    
+    objective_count: int
+    subjective_count: int

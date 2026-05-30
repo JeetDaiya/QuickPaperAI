@@ -50,11 +50,12 @@ Execution Rules:
 4. If the text chunk contains diagrams or layout references, prioritize "Draw a neat labelled diagram" or "Identify the parts" questions.
 5. Formatting Rules:
     - Write ALL chemical formulas, equations, and mathematical expressions in LaTeX notation.
+    - CRITICAL: Since your output is parsed as JSON, you MUST double-escape all LaTeX backslashes (e.g., write \\rightarrow instead of \rightarrow, \\text instead of \text, \\theta instead of \theta). A single backslash will be parsed as a JSON escape code and corrupt the characters (like \rightarrow becoming a carriage return followed by ightarrow).
     - Use single $ for inline: "The water molecule $H_2O$ consists of..."
     - Use double $$ for standalone equations:
-        $$2H_2 + O_2 \rightarrow 2H_2O$$
+        $$2H_2 + O_2 \\rightarrow 2H_2O$$
     - Use \\text{{}} for labels within equations: $\\text{{Glucose}} \\xrightarrow{{\\text{{enzymes}}}} \\text{{Ethanol}} + CO_2$
-    - Subscripts: $H_2SO_4$, Superscripts: $x^2$, Arrows: $\rightarrow$
+    - Subscripts: $H_2SO_4$, Superscripts: $x^2$, Arrows: \\rightarrow
 6. Question Type Formatting Guidelines:
       MCQ:
       - Exactly 4 options labeled (a), (b), (c), (d)
@@ -81,7 +82,7 @@ Execution Rules:
       One Word Answer:
       - Question must have exactly one correct word/term as the answer
       - Example: "Name the pigment that absorbs sunlight in plants."
-7. Generate a MAXIMUM of 4-5 questions per batch. Prioritize quality over quantity.
+7. Prioritize question quality. Generate a balanced mix of 2_MARKS, 3_MARKS, and 4_MARKS subjective questions across batches..
 8. **Structured Correct Answers (Evaluation Points):** For subjective questions (2, 3, or 4 marks), do NOT write long, wordy paragraphs for `correct_answer`. Instead, write it as a concise, structured list of **key evaluation points/marking criteria** (e.g., bulleted list with "-"). This allows the teacher to easily evaluate student answers by scanning for key scientific terms, definitions, equations, and logic.
    - For example, a 3-mark answer should be structured like:
      "- Identify substance X as Sodium Carbonate. [1 Mark]
