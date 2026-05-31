@@ -6,7 +6,6 @@ from graph.nodes import question_generator_node, router_node, review_node, pdf_n
 
 
 graph = StateGraph(state_schema=PaperState)
-
 graph.add_node("distribute", lambda state: {})  # pass-through to initialize state
 graph.add_node("question_generator_node", question_generator_node)
 graph.add_node("review_node", review_node)

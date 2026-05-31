@@ -46,6 +46,7 @@ class PaperRequest(BaseModel):
         default_factory=lambda: list(QuestionTypes),
         description="List of allowed question types for this paper request."
     )
+    
 
     @model_validator(mode="after")
     def validate_counts_and_types(self) -> "PaperRequest":

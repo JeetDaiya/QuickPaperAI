@@ -1,14 +1,14 @@
-from graph.state import PaperState, ChapterState
-from config.prompts import QUESTION_GENERATOR_SYSTEM_PROMPT
-from config.settings import generator_model
-from models.schemas import BatchOutput, Question
-from db.db import get_chapter_chunks
+from core.graph.state import PaperState, ChapterState
+from core.config.prompts import QUESTION_GENERATOR_SYSTEM_PROMPT
+from core.config.settings import generator_model
+from core.models.schemas import BatchOutput, Question
+from core.db.db import get_chapter_chunks
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.types import Send, interrupt
-from pdf.generator import generate_paper_html, generate_answer_html, generate_pdf, generate_docx
-from config.rate_limiter import TokenBucket
-import asyncio
-
+from core.pdf.generator import generate_paper_html, generate_answer_html, generate_pdf, generate_docx
+from core.config.rate_limiter import TokenBucket
+from core.graph.tracker import update_chapter_progress, get_chapter_progress
+import os
 
 generator_model = generator_model.with_structured_output(schema=BatchOutput)
 rate_limiter = TokenBucket(max_capacity=5, refil_rate=0.0833)
@@ -30,6 +30,7 @@ def group_by_subtopic(chunks: list[dict], min_chars: int = 1500) -> list[dict]:
     Returns a list of dicts: [{"topics": ["topic1", "topic2"], "content": "..."}]
     """
     from collections import OrderedDict
+
     
     # Step 1: Group chunks by sub_topic (preserving order)
     topic_groups = OrderedDict()
@@ -99,6 +100,13 @@ async def question_generator_node(state: ChapterState) -> dict:
     topic_batches = group_by_subtopic(chapter_chunks)
     
     print(f"[{chapter}] {len(chapter_chunks)} chunks → {len(topic_batches)} topic batches")
+
+    update_chapter_progress(
+        thread_id=state["thread_id"],
+        chapter=chapter,
+        status="processing",
+        generated_count=0
+    )
     
     # ── Formulate dynamic quota instructions to preserve variance and coverage ──
     subjective_breakdown_str = ""
@@ -167,7 +175,12 @@ async def question_generator_node(state: ChapterState) -> dict:
         print(f"  Batch {i+1}/{len(topic_batches)}: {batch['topics']}")
         
         await rate_limiter.acquire()
-        
+        update_chapter_progress(
+            thread_id=thread_id,
+            chapter=chapter,
+            status="processing",
+            generated_count=len(question_list)
+        )
         try:
             batch_output = await generator_chain.ainvoke({
                 "formatted_chunks": batch["content"],
@@ -175,8 +188,10 @@ async def question_generator_node(state: ChapterState) -> dict:
                 "required_quota_instructions": quota_instructions
             })
             question_list.extend(batch_output.question_list)
+
         except Exception as e:
             print(f"  ⚠️ Batch {i+1} failed, skipping: {e}")
+    
         
 
     # ── Post-generation dynamic filtering (Option B Enforcer) ──
@@ -192,6 +207,14 @@ async def question_generator_node(state: ChapterState) -> dict:
         if q.diagram_prompt:
             q.diagram_prompt = clean_latex(q.diagram_prompt)
 
+
+    update_chapter_progress(
+        thread_id=thread_id,
+        chapter=chapter,
+        status="completed",
+        generated_count=len(question_list)
+    )
+
     return {
         "all_questions" : question_list
     }
@@ -204,6 +227,7 @@ def router_node(state: PaperState):
     objective_count = state["paper_request"].objective_count
     subjective_count = state["paper_request"].subjective_count
     allowed_types = state["paper_request"].allowed_types
+    thread_id = state["thread_id"]
     
     return [
         Send(node="question_generator_node", arg={
@@ -211,7 +235,8 @@ def router_node(state: PaperState):
             "subject": subject,
             "objective_count": objective_count,
             "subjective_count": subjective_count,
-            "allowed_types": allowed_types
+            "allowed_types": allowed_types,
+            "thread_id" : thread_id
         })
         for chapter in chapter_list
     ]
@@ -247,14 +272,18 @@ def pdf_node(state: PaperState):
     """Generates the pdf from list of selected questions"""
     selected_questions = state["selected_questions"]
     
+    thread_id = state["thread_id"]
+    output_dir = f"outputs/{thread_id}"
+    os.makedirs(output_dir, exist_ok=True)
+    
     paper_html = generate_paper_html(paper_request=state["paper_request"], selected_questions=selected_questions)
     answer_html = generate_answer_html(paper_request=state["paper_request"], selected_questions=selected_questions)
 
     # 1. Compile PDFs
-    generate_pdf(paper_string=paper_html, answer_string=answer_html, answer_output_path='answer.pdf', paper_output_path='paper.pdf')
+    generate_pdf(paper_string=paper_html, answer_string=answer_html, answer_output_path=f'{output_dir}/answer.pdf', paper_output_path=f'{output_dir}/paper.pdf')
     
     # 2. Compile DOCX
-    generate_docx(selected_questions=selected_questions, paper_request=state["paper_request"], output_path='paper.docx')
+    generate_docx(selected_questions=selected_questions, paper_request=state["paper_request"], output_path=f'{output_dir}/paper.docx')
     
     
     
