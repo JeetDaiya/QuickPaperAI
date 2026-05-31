@@ -20,28 +20,51 @@ SECTION_CONFIG = OrderedDict({
 
 def _render_question_html(q: Question, q_number: int) -> str:
     """Renders a single question as HTML."""
-    html = f'<div class="question"><span class="q-text"><strong>Q{q_number}.</strong> {q.question_text}</span>'
+    q_text_formatted = q.question_text.replace("\n", "<br>")
+    html = f'<div class="question"><span class="q-text"><strong>Q{q_number}.</strong> {q_text_formatted}</span>'
     html += f'<span class="q-marks">[{q.marks}]</span></div>\n'
 
     # Render MCQ options
     if q.question_type == QuestionTypes.MCQ and q.options:
+        import re
         html += '<div class="options">\n'
         for i, opt in enumerate(q.options):
             label = chr(97 + i)  # a, b, c, d
-            html += f'  <span class="option">({label}) {opt}</span>\n'
+            opt_stripped = opt.strip()
+            # If the option already starts with an option prefix like "(a)", "a.", "a)" (case-insensitive)
+            if re.match(r'^[\(\[a-dA-D]?[a-dA-D][\)\.\s]\s*', opt_stripped):
+                html += f'  <span class="option">{opt_stripped}</span>\n'
+            else:
+                html += f'  <span class="option">({label}) {opt_stripped}</span>\n'
         html += '</div>\n'
 
     # Render Match the Column as a table
     if q.question_type == QuestionTypes.MATCH_THE_COLUMN and q.options:
-        html += '<table class="match-table">\n'
-        html += '<tr><th>Column A</th><th>Column B</th></tr>\n'
-        for opt in q.options:
-            if "|" in opt:
-                col_a, col_b = opt.split("|", 1)
-                html += f'<tr><td>{col_a.strip()}</td><td>{col_b.strip()}</td></tr>\n'
-            else:
-                html += f'<tr><td colspan="2">{opt}</td></tr>\n'
-        html += '</table>\n'
+        has_pipe = any("|" in opt for opt in q.options)
+        if has_pipe:
+            html += '<table class="match-table">\n'
+            html += '<tr><th>Column A</th><th>Column B</th></tr>\n'
+            for opt in q.options:
+                if "|" in opt:
+                    col_a, col_b = opt.split("|", 1)
+                    html += f'<tr><td>{col_a.strip()}</td><td>{col_b.strip()}</td></tr>\n'
+                else:
+                    html += f'<tr><td colspan="2">{opt}</td></tr>\n'
+            html += '</table>\n'
+        else:
+            html += '<div class="options">\n'
+            for i, opt in enumerate(q.options):
+                label = chr(97 + i)
+                html += f'  <span class="option">({label}) {opt}</span>\n'
+            html += '</div>\n'
+
+    # Render diagram placeholder if present
+    if q.diagram_prompt:
+        html += f"""
+        <div class="diagram-placeholder-box" style="border: 1px solid #000000; width: 100%; height: 160px; display: flex; align-items: center; justify-content: center; margin: 10px 0; background-color: #ffffff; text-align: center; box-sizing: border-box; padding: 10px;">
+            <span style="font-size: 0.9em; font-family: inherit; color: #000000; font-weight: bold;">[ DIAGRAM: Labeled Diagram Space ]</span>
+        </div>
+        """
 
     return html
 
@@ -286,24 +309,30 @@ def _render_answer_html(q: Question, q_number: int) -> str:
     html += f'    <span class="q-marks" style="white-space: nowrap; font-weight: bold; min-width: 35px; text-align: right;">[{q.marks} Marks]</span>'
     html += f'  </div>'
     
-    # Format the correct answer content
-    ans_content = q.correct_answer.strip()
     formatted_ans = ""
     
-    if ans_content.startswith("-") or "\n-" in ans_content:
-        # Convert markdown list to HTML list
-        lines = ans_content.split("\n")
+    # ── Use Structured Evaluation Scheme if available ──
+    if q.evaluation_scheme:
         formatted_ans += '<ul class="answer-list" style="margin-left: 20px; padding-left: 10px; list-style-type: disc;">\n'
-        for line in lines:
-            line_str = line.strip()
-            if line_str.startswith("-"):
-                line_str = line_str.lstrip("-").strip()
-            if line_str:
-                formatted_ans += f'  <li style="margin-bottom: 4px;">{line_str}</li>\n'
+        for pt in q.evaluation_scheme:
+            marks_suffix = f" [{pt.allocated_marks} Mark{'s' if pt.allocated_marks > 1 else ''}]"
+            formatted_ans += f'  <li style="margin-bottom: 4px;">{pt.point_text}<strong>{marks_suffix}</strong></li>\n'
         formatted_ans += '</ul>\n'
     else:
-        # Standard block formatting
-        formatted_ans = f'<p style="margin: 0; line-height: 1.5;">{ans_content.replace(chr(10), "<br>")}</p>'
+        # Fallback to correct_answer string parsing
+        ans_content = q.correct_answer.strip()
+        if ans_content.startswith("-") or "\n-" in ans_content:
+            lines = ans_content.split("\n")
+            formatted_ans += '<ul class="answer-list" style="margin-left: 20px; padding-left: 10px; list-style-type: disc;">\n'
+            for line in lines:
+                line_str = line.strip()
+                if line_str.startswith("-"):
+                    line_str = line_str.lstrip("-").strip()
+                if line_str:
+                    formatted_ans += f'  <li style="margin-bottom: 4px;">{line_str}</li>\n'
+            formatted_ans += '</ul>\n'
+        else:
+            formatted_ans = f'<p style="margin: 0; line-height: 1.5;">{ans_content.replace(chr(10), "<br>")}</p>'
 
     html += f'  <div class="answer-box" style="margin-left: 24px; padding: 10px 15px; border-left: 3px solid #0056b3; background-color: #f8f9fa; border-radius: 0 4px 4px 0;">'
     html += f'    <strong style="color: #0056b3; font-size: 11pt; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px;">Evaluation & Marking Scheme:</strong>'
@@ -352,6 +381,28 @@ def generate_answer_html(selected_questions: list[Question], paper_request: Pape
 
         sections_html += "</div>\n"
         section_number += 1
+
+    # ── Compile Diagram Prompt Annex ──
+    diagram_questions = [(idx, q) for idx, q in enumerate(selected_questions, 1) if q.diagram_prompt]
+    annex_html = ""
+    if diagram_questions:
+        annex_html += """
+        <div style="page-break-before: always; margin-top: 40px; border-top: 2px solid #000; padding-top: 20px;">
+            <h2 style="font-size: 15pt; font-weight: bold; color: #0056b3; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 0.5px;">
+                📋 DIAGRAM PROMPT ANNEX (FOR TEACHERS ONLY)
+            </h2>
+            <p style="font-size: 11pt; line-height: 1.5; color: #333; margin-bottom: 20px; background-color: #f8f9fa; border-left: 3px solid #6c757d; padding: 10px 15px;">
+                <strong>Instruction:</strong> Copy the descriptive prompts below and paste them into the <strong>Gemini App</strong> or any high-quality image generator. Copy the resulting diagram and paste it into the editable <strong>DOCX</strong> question sheet at the corresponding question placeholder!
+            </p>
+        """
+        for q_num, q in diagram_questions:
+            annex_html += f"""
+            <div style="margin-bottom: 20px; background-color: #ffffff; border: 1px solid #ddd; border-radius: 4px; padding: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); page-break-inside: avoid;">
+                <strong style="font-size: 11pt; color: #333; display: block; margin-bottom: 6px;">Q{q_num} Diagram Generation Prompt:</strong>
+                <div style="font-size: 11pt; font-family: monospace; background-color: #f4f4f4; padding: 10px; border-radius: 4px; border: 1px solid #ccc; white-space: pre-wrap; word-break: break-all; user-select: all;">{q.diagram_prompt}</div>
+            </div>
+            """
+        annex_html += "</div>\n"
 
     # Build full HTML with the same beautiful typography and KaTeX support
     html = f"""<!DOCTYPE html>
@@ -453,6 +504,8 @@ def generate_answer_html(selected_questions: list[Question], paper_request: Pape
     </div>
 
     {sections_html}
+    
+    {annex_html}
 
     <script>
         document.addEventListener("DOMContentLoaded", function() {{
@@ -480,6 +533,9 @@ def generate_pdf(paper_string, answer_string, paper_output_path, answer_output_p
         
         paper_page.set_content(paper_string)
         answer_page.set_content(answer_string)
+
+        paper_page.wait_for_load_state("networkidle")
+        answer_page.wait_for_load_state("networkidle")
         
         paper_page.pdf(
             path=paper_output_path,
@@ -495,5 +551,128 @@ def generate_pdf(paper_string, answer_string, paper_output_path, answer_output_p
         
         
         browser.close()
+
+
+def generate_docx(selected_questions: list[Question], paper_request: PaperRequest, output_path: str):
+    """
+    Generates a beautifully formatted Microsoft Word document (.docx) using Pandoc.
+    Translates all LaTeX formulas to native Word Equation XML (OMML) natively!
+    """
+    import os
+    import subprocess
+    from datetime import date
+    
+    total_marks = sum(q.marks for q in selected_questions)
+    today = date.today().strftime("%d-%m-%Y")
+    
+    chapters_str = ", ".join(paper_request.chapters)
+    
+    # 1. Build the Header using standard Pandoc-supported HTML table for a borderless side-by-side metadata layout
+    md = f"""<table width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%; border:none;">
+  <tr style="border:none;">
+    <td align="left" valign="top" style="border:none; text-align:left; font-family:serif;">
+      <strong>Subject:</strong> {paper_request.subject}<br>
+      <strong>Standard:</strong> {paper_request.standard}
+    </td>
+    <td align="right" valign="top" style="border:none; text-align:right; font-family:serif;">
+      <strong>Date:</strong> {today}<br>
+      <strong>Chapters:</strong> {chapters_str}
+    </td>
+  </tr>
+</table>
+
+<p align="center" style="text-align:center; font-family:serif; margin-top:20px; margin-bottom:5px;">
+  <span style="font-size:18pt; font-weight:bold; text-transform:uppercase; letter-spacing:1px;">{paper_request.institution_name.upper()}</span>
+</p>
+<p align="center" style="text-align:center; font-family:serif; margin-bottom:15px;">
+  <strong>Total Marks: {total_marks}</strong>
+</p>
+
+<hr style="border:none; border-top:2px solid #000000; height:1px; margin-bottom:20px;" />
+
+"""
+    
+    # Group questions by type
+    grouped = {}
+    for q in selected_questions:
+        if q.question_type not in grouped:
+            grouped[q.question_type] = []
+        grouped[q.question_type].append(q)
+        
+    q_number = 1
+    section_number = 1
+    
+    for q_type, heading in SECTION_CONFIG.items():
+        if q_type not in grouped:
+            continue
+            
+        questions = grouped[q_type]
+        section_marks = sum(q.marks for q in questions)
+        
+        md += f"## Section {section_number}: {heading} ({section_marks} Marks)\n\n"
+        
+        for q in questions:
+            # Replaces HTML-specific breaks with clean newlines for Markdown
+            q_text = q.question_text.replace("<br>", "\n").replace("\n", "  \n")
+            md += f"**Q{q_number}.** {q_text} *[{q.marks} Mark{'s' if q.marks > 1 else ''}]*\n\n"
+            
+            # MCQ Options Rendering
+            if q.question_type == QuestionTypes.MCQ and q.options:
+                import re
+                for idx, opt in enumerate(q.options):
+                    label = chr(97 + idx) # a, b, c, d
+                    opt_str = opt.strip()
+                    if re.match(r'^[\(\[a-dA-D]?[a-dA-D][\)\.\s]\s*', opt_str):
+                        md += f"  * {opt_str}\n"
+                    else:
+                        md += f"  * ({label}) {opt_str}\n"
+                md += "\n"
+                
+            # Match the Column Table Rendering
+            elif q.question_type == QuestionTypes.MATCH_THE_COLUMN and q.options:
+                has_pipe = any("|" in opt for opt in q.options)
+                if has_pipe:
+                    md += "| Column A | Column B |\n"
+                    md += "| :--- | :--- |\n"
+                    for opt in q.options:
+                        if "|" in opt:
+                            col_a, col_b = opt.split("|", 1)
+                            md += f"| {col_a.strip()} | {col_b.strip()} |\n"
+                        else:
+                            md += f"| {opt.strip()} | |\n"
+                    md += "\n"
+                else:
+                    for idx, opt in enumerate(q.options):
+                        label = chr(97 + idx)
+                        md += f"  * ({label}) {opt}\n"
+                    md += "\n"
+                    
+            # Diagram Placeholder Box (Single-Cell Table)
+            if q.diagram_prompt:
+                md += f"| **[ DIAGRAM PLACEHOLDER: Labeled Diagram Space ]** |\n"
+                md += "| :--- |\n"
+                md += f"| **Copy this prompt into Gemini to generate the diagram:**  \n`{q.diagram_prompt}`  \n\n*Once generated, paste the diagram here and delete this text.* |\n\n"
+                
+            q_number += 1
+            
+        section_number += 1
+        md += "\n"
+        
+    # 2. Write Markdown to a temporary file
+    temp_md_path = output_path + ".temp.md"
+    with open(temp_md_path, "w", encoding="utf-8") as f:
+        f.write(md)
+        
+    # 3. Call Pandoc to compile to DOCX
+    try:
+        cmd = ["pandoc", "-f", "markdown", "-t", "docx", temp_md_path, "-o", output_path]
+        subprocess.run(cmd, check=True)
+        print(f"🎉 DOCX Question Paper compiled successfully to {output_path}")
+    except Exception as e:
+        print(f"⚠️ Pandoc DOCX compilation failed: {e}")
+    finally:
+        # Cleanup temp file
+        if os.path.exists(temp_md_path):
+            os.remove(temp_md_path)
     
     

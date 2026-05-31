@@ -80,3 +80,8 @@ logs/
 
 *.pdf
 Std_10_Chapters
+
+walkthrough.md
+*.docx
+project_structure.md
+frontend.md

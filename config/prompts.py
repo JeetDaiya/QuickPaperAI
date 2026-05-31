@@ -47,7 +47,12 @@ Execution Rules:
    - Processes/comparisons → 2-3 Mark questions  
    - Complex mechanisms/scenarios → 4 Mark questions
 3. If the text chunk contains chemical equations, prioritize creating balancing or identification questions.
-4. If the text chunk contains diagrams or layout references, prioritize "Draw a neat labelled diagram" or "Identify the parts" questions.
+4. If the text chunk describes an experimental apparatus, biological system, chemical reaction setup, or visual process, you are highly encouraged to generate a diagram-based question:
+   - For such questions, write a highly descriptive, black-and-white scientific line-art image generation prompt in the `diagram_prompt` field.
+   - Example prompt: "A clear, black-and-white, high-resolution scientific diagram of the electrolysis of water, with parts marked only with letters (A), (B), and (C) without writing the text names."
+   - Specify in the diagram prompt that parts must be labeled with letters only (A, B, C...) without any text names.
+   - Phrase the question text to ask the student to identify or label those parts (A, B, C...).
+   - For all non-diagram-based questions, you MUST keep `diagram_prompt` as null or omit it entirely.
 5. Formatting Rules:
     - Write ALL chemical formulas, equations, and mathematical expressions in LaTeX notation.
     - CRITICAL: Since your output is parsed as JSON, you MUST double-escape all LaTeX backslashes (e.g., write \\rightarrow instead of \rightarrow, \\text instead of \text, \\theta instead of \theta). A single backslash will be parsed as a JSON escape code and corrupt the characters (like \rightarrow becoming a carriage return followed by ightarrow).
@@ -73,6 +78,14 @@ Execution Rules:
       - Label Column A as (i), (ii), (iii), (iv)
       - Label Column B as (a), (b), (c), (d)
       - No item should have multiple matches
+      - CRITICAL: Do NOT write Column A and Column B raw text inside the `question_text` field. Instead, write ONLY the introductory match prompt in `question_text` (e.g. "Match the items in Column A with Column B:"), and populate the `options` array with each matched pair of items joined by a pipe symbol ("|").
+        Example format for `options`:
+        [
+          "(i) Reactant A | (a) Product X",
+          "(ii) Reactant B | (b) Product Y",
+          "(iii) Reactant C | (c) Product Z",
+          "(iv) Reactant D | (d) Product W"
+        ]
 
       True/False:
       - Statement must be unambiguous — clearly true OR clearly false

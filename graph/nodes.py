@@ -5,11 +5,14 @@ from models.schemas import BatchOutput, Question
 from db.db import get_chapter_chunks
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.types import Send, interrupt
-from pdf.generator import generate_paper_html, generate_answer_html, generate_pdf
-import time
+from pdf.generator import generate_paper_html, generate_answer_html, generate_pdf, generate_docx
+from config.rate_limiter import TokenBucket
+import asyncio
 
 
 generator_model = generator_model.with_structured_output(schema=BatchOutput)
+rate_limiter = TokenBucket(max_capacity=5, refil_rate=0.0833)
+
 
 def format_batch(chunks: list[dict]) -> str:
     "Takes the chunks and formats them for input"
@@ -76,17 +79,21 @@ def clean_latex(text: str) -> str:
     return text.replace('\r', '\\r').replace('\t', '\\t')
 
 
-def question_generator_node(state: ChapterState) -> dict:
+async def question_generator_node(state: ChapterState) -> dict:
     """
     Fetches chapter chunks, groups by sub-topic, and generates questions per topic group.
     """
-    
+    from models.schemas import QuestionTypes
     question_list : list[Question] = []
     
     chapter = state["chapter"]
     subject = state["subject"]
     objective_count = state["objective_count"]
     subjective_count = state["subjective_count"]
+    allowed_types = state["allowed_types"]
+    
+    allowed_objective_types = [t for t in allowed_types if t.is_objective]
+    allowed_subjective_types = [t for t in allowed_types if t.is_subjective]
     
     chapter_chunks = get_chapter_chunks(subject=subject, chapter=chapter)
     topic_batches = group_by_subtopic(chapter_chunks)
@@ -94,32 +101,42 @@ def question_generator_node(state: ChapterState) -> dict:
     print(f"[{chapter}] {len(chapter_chunks)} chunks → {len(topic_batches)} topic batches")
     
     # ── Formulate dynamic quota instructions to preserve variance and coverage ──
-    if subjective_count > 0:
-        # Calculate strict quotas in Python (LLMs are bad at math, do it for them)
-        four_mark_count = max(1, subjective_count // 3) if subjective_count >= 3 else 0
-        three_mark_count = max(1, (subjective_count - four_mark_count) // 2) if subjective_count >= 2 else (1 if subjective_count == 1 else 0)
-        two_mark_count = subjective_count - four_mark_count - three_mark_count
+    subjective_breakdown_str = ""
+    if subjective_count > 0 and allowed_subjective_types:
+        # Check if we have the standard balanced combination (all three subjective types allowed)
+        has_all_subj = all(t in allowed_subjective_types for t in [QuestionTypes.TWO_MARK_ANS, QuestionTypes.THREE_MARK_ANS, QuestionTypes.FOUR_MARK_ANS])
+        if has_all_subj:
+            # Calculate strict quotas in Python (LLMs are bad at math, do it for them)
+            four_mark_count = max(1, subjective_count // 3) if subjective_count >= 3 else 0
+            three_mark_count = max(1, (subjective_count - four_mark_count) // 2) if subjective_count >= 2 else (1 if subjective_count == 1 else 0)
+            two_mark_count = subjective_count - four_mark_count - three_mark_count
 
-        subjective_breakdown_str = (
-            f"EXACT DISTRIBUTION REQUIRED:\n"
-            f"- Exactly {four_mark_count} questions MUST be 4_MARKS (Long Answer/Case Study)\n"
-            f"- Exactly {three_mark_count} questions MUST be 3_MARKS (System/Process Explanations)\n"
-            f"- Exactly {two_mark_count} questions MUST be 2_MARKS (Differences/Short Conceptual)\n"
-        )
-    else:
-        subjective_breakdown_str = ""
+            subjective_breakdown_str = (
+                f"EXACT DISTRIBUTION REQUIRED:\n"
+                f"- Exactly {four_mark_count} questions MUST be 4_MARKS (Long Answer/Case Study)\n"
+                f"- Exactly {three_mark_count} questions MUST be 3_MARKS (System/Process Explanations)\n"
+                f"- Exactly {two_mark_count} questions MUST be 2_MARKS (Differences/Short Conceptual)\n"
+            )
+        else:
+            # Option B: Let LLM choose between custom subjective subset
+            allowed_subj_values = ", ".join(t.value for t in allowed_subjective_types)
+            subjective_breakdown_str = (
+                f"EXACT DISTRIBUTION REQUIRED:\n"
+                f"You MUST generate exactly {subjective_count} subjective questions choosing ONLY from these allowed types: {allowed_subj_values}."
+            )
 
     # Now build your final prompt strings
+    allowed_obj_values = ", ".join(t.value for t in allowed_objective_types) if allowed_objective_types else ""
     if objective_count > 0 and subjective_count > 0:
         quota_instructions = (
-            f"Please generate EXACTLY {objective_count} objective questions (MCQ, Fill in blank, Match, T/F) and "
+            f"Please generate EXACTLY {objective_count} objective questions using ONLY these allowed types: {allowed_obj_values} and "
             f"EXACTLY {subjective_count} subjective questions based strictly on this textbook content. "
             f"Ensure all topics are covered evenly.\n\n{subjective_breakdown_str}"
         )
     elif objective_count > 0:
         quota_instructions = (
-            f"Please generate EXACTLY {objective_count} objective questions (MCQ, Fill in blank, Match, T/F) based strictly "
-            "on this textbook content. Do NOT generate any subjective (2_MARKS, 3_MARKS, or 4_MARKS) questions."
+            f"Please generate EXACTLY {objective_count} objective questions using ONLY these allowed types: {allowed_obj_values} based strictly "
+            "on this textbook content. Do NOT generate any subjective questions."
         )
     elif subjective_count > 0:
         quota_instructions = (
@@ -127,7 +144,11 @@ def question_generator_node(state: ChapterState) -> dict:
             f"Do NOT generate any objective questions.\n\n{subjective_breakdown_str}"
         )
     else:
-        quota_instructions = "Please generate 2-3 standard-compliant questions based strictly on this textbook content."
+        allowed_all_values = ", ".join(t.value for t in allowed_types)
+        quota_instructions = (
+            f"Please generate 2-3 standard-compliant questions based strictly on this textbook content. "
+            f"You are strictly allowed to generate only these question types: {allowed_all_values}."
+        )
 
     generator_prompt = ChatPromptTemplate([
         ("system", QUESTION_GENERATOR_SYSTEM_PROMPT),
@@ -145,8 +166,10 @@ def question_generator_node(state: ChapterState) -> dict:
         
         print(f"  Batch {i+1}/{len(topic_batches)}: {batch['topics']}")
         
+        await rate_limiter.acquire()
+        
         try:
-            batch_output = generator_chain.invoke({
+            batch_output = await generator_chain.ainvoke({
                 "formatted_chunks": batch["content"],
                 "previous_questions": previous_question,
                 "required_quota_instructions": quota_instructions
@@ -155,7 +178,9 @@ def question_generator_node(state: ChapterState) -> dict:
         except Exception as e:
             print(f"  ⚠️ Batch {i+1} failed, skipping: {e}")
         
-        time.sleep(5)
+
+    # ── Post-generation dynamic filtering (Option B Enforcer) ──
+    question_list = [q for q in question_list if q.question_type in allowed_types]
 
     # ── Post-process to fix LaTeX carriage return/tab JSON decoding issues system-wide ──
     for q in question_list:
@@ -164,6 +189,8 @@ def question_generator_node(state: ChapterState) -> dict:
             q.options = [clean_latex(opt) for opt in q.options]
         q.correct_answer = clean_latex(q.correct_answer)
         q.answer = clean_latex(q.answer)
+        if q.diagram_prompt:
+            q.diagram_prompt = clean_latex(q.diagram_prompt)
 
     return {
         "all_questions" : question_list
@@ -171,20 +198,20 @@ def question_generator_node(state: ChapterState) -> dict:
     
 
 def router_node(state: PaperState):
-    
     """Takes the list of questions and parallely generates question for each chapter."""
-    
     chapter_list = state["paper_request"].chapters
     subject = state["paper_request"].subject
     objective_count = state["paper_request"].objective_count
     subjective_count = state["paper_request"].subjective_count
+    allowed_types = state["paper_request"].allowed_types
     
     return [
         Send(node="question_generator_node", arg={
             "chapter": chapter,
             "subject": subject,
             "objective_count": objective_count,
-            "subjective_count": subjective_count
+            "subjective_count": subjective_count,
+            "allowed_types": allowed_types
         })
         for chapter in chapter_list
     ]
@@ -223,7 +250,11 @@ def pdf_node(state: PaperState):
     paper_html = generate_paper_html(paper_request=state["paper_request"], selected_questions=selected_questions)
     answer_html = generate_answer_html(paper_request=state["paper_request"], selected_questions=selected_questions)
 
+    # 1. Compile PDFs
     generate_pdf(paper_string=paper_html, answer_string=answer_html, answer_output_path='answer.pdf', paper_output_path='paper.pdf')
+    
+    # 2. Compile DOCX
+    generate_docx(selected_questions=selected_questions, paper_request=state["paper_request"], output_path='paper.docx')
     
     
     

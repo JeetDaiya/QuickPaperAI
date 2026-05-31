@@ -1,5 +1,5 @@
 from typing import TypedDict, Annotated
-from models.schemas import Question, PaperRequest
+from models.schemas import Question, PaperRequest, QuestionTypes
 import operator
 
 
@@ -13,3 +13,4 @@ class ChapterState(TypedDict):
     subject: str
     objective_count: int
     subjective_count: int
+    allowed_types: list[QuestionTypes]

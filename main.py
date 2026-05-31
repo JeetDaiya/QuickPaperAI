@@ -7,9 +7,10 @@ from psycopg.rows import dict_row
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 import os
 import asyncio
+import uuid
 
 
-config = {"configurable" : {"thread_id" : "thread_12"}, "max_concurrency" : 2}
+config = {"configurable" : {"thread_id" : str(uuid.uuid4())}, "max_concurrency" : 3}
 
 async def run_agent():
     
@@ -34,15 +35,56 @@ async def run_agent():
         
     
         
+        # =====================================================================
+        # STANDARD BALANCED MODE (Active Default)
+        # Allows all objective & subjective question types
+        # =====================================================================
         request = PaperRequest(
             subject="science",
             standard="10",
-            institution_name="Test School",
+            institution_name="Test Balanced School",
             difficulty="Balanced",
             chapters=["1"],
             objective_count=5,
-            subjective_count=3
+            subjective_count=3,
+            allowed_types=list(QuestionTypes)  # or omit completely to default to all
         )
+
+        # =====================================================================
+        # COMMENTED OUT INITIALIZATION EXAMPLES (For Future Reference)
+        # =====================================================================
+        #
+        # 1. MCQ-Only Mode
+        # ---------------------------------------------------------------------
+        # request = PaperRequest(
+        #     subject="science",
+        #     standard="10",
+        #     institution_name="Test MCQ School",
+        #     difficulty="Balanced",
+        #     chapters=["1"],
+        #     objective_count=6,
+        #     subjective_count=0,
+        #     allowed_types=[QuestionTypes.MCQ]
+        # )
+        #
+        # 2. Objective-Only Mode (MCQs, Fill-in-the-blanks, Match columns, etc.)
+        # ---------------------------------------------------------------------
+        # request = PaperRequest(
+        #     subject="science",
+        #     standard="10",
+        #     institution_name="Test Objective School",
+        #     difficulty="Balanced",
+        #     chapters=["1"],
+        #     objective_count=8,
+        #     subjective_count=0,
+        #     allowed_types=[
+        #         QuestionTypes.MCQ,
+        #         QuestionTypes.FILL_IN_THE_BLANK,
+        #         QuestionTypes.MATCH_THE_COLUMN,
+        #         QuestionTypes.TRUE_FALSE,
+        #         QuestionTypes.ONE_WORD_ANS
+        #     ]
+        # )
         
         result = await agent.ainvoke({"paper_request": request}, config)
         
@@ -55,11 +97,14 @@ async def run_agent():
         for i, q in enumerate(questions):
             print(f"  [{i}] ({q['question_type']}) {q['question_text'][:80]}...")
         # ── Get teacher selection ──
-        picks = input("\nEnter indices (comma-separated): ")
-        selected = [int(x.strip()) for x in picks.split(",")]
+        picks = input("\nEnter indices (comma-separated) or 'all' to select all: ")
+        if picks.strip().lower() == "all":
+            selected = list(range(len(questions)))
+        else:
+            selected = [int(x.strip()) for x in picks.split(",")]
         # ── Resume graph ──
         final = await agent.ainvoke(Command(resume=selected), config)
-        print("\nDone! Exam paper saved to output.pdf and Answer Key saved to output_answers.pdf")
+        print("\nDone! Exam paper saved to paper.pdf & paper.docx, and Answer Key & Annex saved to answer.pdf")
         
 if __name__ == "__main__":
     asyncio.run(run_agent())

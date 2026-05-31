@@ -7,12 +7,12 @@ import os
 
 load_dotenv()
 
-MAIN_AI_MODEL = "gemini-3.5-flash"
+MAIN_AI_MODEL = "gemini-3.1-flash-lite"
 SUPABASE_KEY=os.getenv("SUPABASE_KEY")
 SUPABASE_URL=os.getenv("SUPABASE_URL")
 
 
-ALTERNATE_GOOGLE_AI_MODELS = ["gemini-3.1-flash","gemini-3.1-flash-lite"]
+ALTERNATE_GOOGLE_AI_MODELS = ["gemini-3.5-flash", "gemini-2.5-flash"]
 ALTERNATE_GROQ_MODELS = ["llama-3.3-70b-versatile", "openai/gpt-oss-120b"]
 
 
@@ -46,7 +46,7 @@ generator_model = ChatGoogleGenerativeAI(
     thinking_level="medium"
 )
 
-generator_model.with_fallbacks(model_list)
+generator_model = generator_model.with_fallbacks(model_list)
 
 
 
