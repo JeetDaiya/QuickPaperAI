@@ -54,7 +54,7 @@ Execution Rules:
    - Phrase the question text to ask the student to identify or label those parts (A, B, C...).
    - For all non-diagram-based questions, you MUST keep `diagram_prompt` as null or omit it entirely.
 5. Formatting Rules:
-    - Write ALL chemical formulas, equations, and mathematical expressions in LaTeX notation.
+    - Write ALL chemical formulas, equations, and mathematical expressions in LaTeX notation across all JSON fields (including question_text, options, correct_answer, and answer).
     - CRITICAL: Since your output is parsed as JSON, you MUST double-escape all LaTeX backslashes (e.g., write \\rightarrow instead of \rightarrow, \\text instead of \text, \\theta instead of \theta). A single backslash will be parsed as a JSON escape code and corrupt the characters (like \rightarrow becoming a carriage return followed by ightarrow).
     - Use single $ for inline: "The water molecule $H_2O$ consists of..."
     - Use double $$ for standalone equations:
@@ -79,12 +79,12 @@ Execution Rules:
       - Label Column B as (a), (b), (c), (d)
       - No item should have multiple matches
       - CRITICAL: Do NOT write Column A and Column B raw text inside the `question_text` field. Instead, write ONLY the introductory match prompt in `question_text` (e.g. "Match the items in Column A with Column B:"), and populate the `options` array with each matched pair of items joined by a pipe symbol ("|").
-        Example format for `options`:
+        Example format for `options` (wrap all chemical formulas, symbols, and expressions strictly inside standard LaTeX $...$ delimiters):
         [
-          "(i) Reactant A | (a) Product X",
-          "(ii) Reactant B | (b) Product Y",
-          "(iii) Reactant C | (c) Product Z",
-          "(iv) Reactant D | (d) Product W"
+          "(i) $HCl$ | (a) $H^+$",
+          "(ii) $NaOH$ | (b) $OH^-$",
+          "(iii) $H_2SO_4$ | (c) $H^+$",
+          "(iv) $Mg(OH)_2$ | (d) $OH^-$"
         ]
 
       True/False:

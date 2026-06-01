@@ -21,7 +21,7 @@ async def get_chapters():
 @db_router.get("/history")
 async def get_history():
     
-    dummy_user_id = os.getenv("DUMMY_USER_ID", "550e8400-e29b-41d4-a716-446655440000")
+    dummy_user_id = os.getenv("DUMMY_USER_ID", "550e8400-e29b-41d4-a716-446655440000").strip('"')
     
     try:
         # Query generated papers sorted by created_at DESC

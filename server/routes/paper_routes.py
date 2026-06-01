@@ -4,14 +4,19 @@ from core.models.schemas import PaperRequest
 from core.graph.runner import run_graph
 import uuid
 import os
+import shutil
+import asyncio
 from core.graph.state import PaperState
-from core.graph.tracker import update_chapter_progress, get_chapter_progress
+from core.graph.tracker import update_chapter_progress, get_chapter_progress, PROGRESS_TRACKER
 from pydantic import BaseModel
 from langgraph.types import Command
 from langgraph.graph.state import CompiledStateGraph
 from server.db import db
 
 paper_router = APIRouter(prefix='/api')
+
+# Registry to track active background asyncio Tasks for thread cancellation
+RUNNING_TASKS: dict[str, asyncio.Task] = {}
 
 class ResumeRequest(BaseModel):
     selected_indices: list[int]
@@ -107,7 +112,7 @@ async def upload_completed_paper_to_storage(thread_id : str, agent : CompiledSta
                     print(f"❌ Failed to upload {filename}: {e}")
                     return {"status": "failed"}
 
-        dummy_user_id = os.getenv("DUMMY_USER_ID")
+        dummy_user_id = os.getenv("DUMMY_USER_ID", "550e8400-e29b-41d4-a716-446655440000").strip('"')
 
         insert_data = {
             "user_id" : dummy_user_id,
@@ -137,7 +142,7 @@ async def upload_completed_paper_to_storage(thread_id : str, agent : CompiledSta
     
     
 @paper_router.post('/generate')
-def generate_paper(req : Request, paper_request : PaperRequest, background_task : BackgroundTasks):
+async def generate_paper(req : Request, paper_request : PaperRequest):
     thread_id = str(uuid.uuid4())
 
     # 1. Initialize pending status for all chapters
@@ -149,15 +154,17 @@ def generate_paper(req : Request, paper_request : PaperRequest, background_task 
             generated_count=0
         )    
 
-    # 2. Add background task EXACTLY ONCE to avoid duplicate running
+    # 2. Schedule cancelable background task in the event loop
     agent = req.app.state.agent
-    background_task.add_task(graph_runner, agent, thread_id, paper_request)
+    task = asyncio.create_task(graph_runner(agent, thread_id, paper_request))
+    RUNNING_TASKS[thread_id] = task
+    task.add_done_callback(lambda t: RUNNING_TASKS.pop(thread_id, None))
     
     return {"thread_id": thread_id, "status" : "generating"}
     
 
 @paper_router.post('/resume/{thread_id}')
-async def resume_generation(thread_id: str, payload: ResumeRequest, req: Request, background_tasks: BackgroundTasks):
+async def resume_generation(thread_id: str, payload: ResumeRequest, req: Request):
     """Feeds approved question indices and resumes the execution."""
     agent = req.app.state.agent
     config = {"configurable": {"thread_id": thread_id}}
@@ -170,7 +177,6 @@ async def resume_generation(thread_id: str, payload: ResumeRequest, req: Request
     async def resume_worker():
         try:
             await agent.ainvoke(Command(resume=payload.selected_indices), config)
-            await upload_completed_paper_to_storage(thread_id, agent, config)
         except Exception as e:
             print(f"❌ LangGraph run crashed on resume thread {thread_id}: {e}")
             # Mark all chapters as failed if it crashes during resume
@@ -186,7 +192,10 @@ async def resume_generation(thread_id: str, payload: ResumeRequest, req: Request
                         generated_count=0
                     )
         
-    background_tasks.add_task(resume_worker)
+    task = asyncio.create_task(resume_worker())
+    RUNNING_TASKS[thread_id] = task
+    task.add_done_callback(lambda t: RUNNING_TASKS.pop(thread_id, None))
+    
     return {"status": "resuming"}
 
 
@@ -198,9 +207,45 @@ async def get_generation_status(thread_id: str, req: Request):
     
     snapshot = await agent.aget_state(config)
     
-    # Case 1: Complete 
-    if not snapshot.tasks:
-        # Check output files exist or not
+    # 1. Interrupt Check FIRST (Check both snapshot.tasks and snapshot.next for robustness)
+    is_awaiting_review = False
+    interrupt_payload = {}
+    
+    if snapshot.tasks:
+        for task in snapshot.tasks:
+            if task.interrupts:
+                is_awaiting_review = True
+                interrupt_payload = task.interrupts[0].value
+                break
+                
+    if not is_awaiting_review and snapshot.next and any("review" in str(node).lower() for node in snapshot.next):
+        is_awaiting_review = True
+        # Extract the latest interrupt payload from snapshot metadata if tasks are empty
+        if snapshot.metadata and "interrupts" in snapshot.metadata and snapshot.metadata["interrupts"]:
+            interrupt_payload = snapshot.metadata["interrupts"][0]
+            
+    if is_awaiting_review:
+        paper_req = snapshot.values.get("paper_request", {})
+        if hasattr(paper_req, "model_dump"):
+            paper_req_dict = paper_req.model_dump()
+        elif isinstance(paper_req, dict):
+            paper_req_dict = paper_req
+        else:
+            paper_req_dict = {}
+            
+        targets = {
+            "objective": paper_req_dict.get("objective_count", 0),
+            "subjective": paper_req_dict.get("subjective_count", 0)
+        }
+        
+        return {
+            "status": "awaiting_review",
+            "questions": interrupt_payload.get("questions", []) if isinstance(interrupt_payload, dict) else [],
+            "targets": targets
+        }
+        
+    # 2. Case 2: Complete Check
+    if not snapshot.next or not snapshot.tasks:
         if os.path.exists(f"outputs/{thread_id}/paper.pdf"):
             return {
                 "status": "completed",
@@ -210,7 +255,7 @@ async def get_generation_status(thread_id: str, req: Request):
                     "answer_pdf": f"/api/download/{thread_id}/answer.pdf"
                 }
             }
-        
+            
         # Check if it was marked as failed
         progress = get_chapter_progress(thread_id)
         if progress and any(item.get("status") == "failed" for item in progress.values()):
@@ -219,39 +264,37 @@ async def get_generation_status(thread_id: str, req: Request):
                 "progress": progress
             }
             
-        return {"status": "uninitialized"}
-
-    # Case 2: Interrupt
-    active_task = snapshot.tasks[0]
-    if active_task.interrupts:
-        interrupt_payload = active_task.interrupts[0].value
-        return {
-            "status": "awaiting_review",
-            "questions": interrupt_payload.get("questions", [])
-        }
-        
-    # Case 3: Return real-time chapter counts (check if any chapter has failed)
+    # 3. Default: Return active generation status
     progress = get_chapter_progress(thread_id)
-    if progress and any(item.get("status") == "failed" for item in progress.values()):
+    if progress:
         return {
-            "status": "failed",
+            "status": "generating",
             "progress": progress
         }
         
-    return {
-        "status": "generating",
-        "progress": progress
-    }
+    return {"status": "uninitialized"}
 
 
 @paper_router.get('/download/{thread_id}/{filename}')
-async def download_file(thread_id: str, filename: str):
-    """Streams compiled paper/answer key files securely."""
+async def download_file(thread_id: str, filename: str, preview: bool = False):
+    """Streams compiled paper/answer key files securely. Supports inline browser previewing."""
     output_dir = f"outputs/{thread_id}"
     local_path = f"{output_dir}/{filename}"
 
+    # Set native content types for inline preview browser rendering
+    if filename.endswith(".pdf"):
+        media_type = "application/pdf"
+    elif filename.endswith(".docx"):
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    else:
+        media_type = "application/octet-stream"
+
+    # If previewing in-browser, do not send Content-Disposition: attachment header
+    response_filename = None if preview else filename
+    response_media_type = media_type if preview else "application/octet-stream"
+
     if os.path.exists(local_path):
-        return FileResponse(local_path, media_type="application/octet-stream", filename=filename)
+        return FileResponse(local_path, media_type=response_media_type, filename=response_filename)
     
     print(f"🔄 Cache miss: Local file outputs/{thread_id}/{filename} not found. Attempting cloud recovery...")
 
@@ -264,7 +307,6 @@ async def download_file(thread_id: str, filename: str):
     target_column = column_mapping.get(filename)
     if not target_column:
         raise HTTPException(status_code=400, detail="Invalid filename")
-    
     
     try:
         response = db.table("generated_papers").select(target_column).eq("thread_id", thread_id).execute()
@@ -284,9 +326,79 @@ async def download_file(thread_id: str, filename: str):
             f.write(file_bytes)
 
         print(f"✅ Recovered and hot-cached {filename} successfully from Supabase Storage.")
-        return FileResponse(local_path, media_type="application/octet-stream", filename=filename)
+        return FileResponse(local_path, media_type=response_media_type, filename=response_filename)
         
     except Exception as e:
         print(f"❌ Error recovering file from Supabase: {e}")
         raise HTTPException(status_code=500, detail="Failed to recover file from Supabase")
+    
+@paper_router.post('/save-to-cloud/{thread_id}')
+async def save_to_cloud(thread_id: str, req: Request):
+    try:
+        agent = req.app.state.agent
+        config = {"configurable": {"thread_id": thread_id}}
+        await upload_completed_paper_to_storage(thread_id, agent, config)
+        return {"status": "success"}
+    except Exception as e:
+        print(f"❌ Error saving paper to cloud: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save paper to cloud")
+
+@paper_router.delete('/cancel/{thread_id}')
+async def cancel_generation(thread_id: str, req: Request):
+    """Purges checkpoints, tracking states, active tasks, cloud storage files, and local caches for a thread."""
+    try:
+        # 1. Stop active background graph execution task if running
+        if thread_id in RUNNING_TASKS:
+            task = RUNNING_TASKS[thread_id]
+            if not task.done():
+                task.cancel()
+                print(f"🛑 Cancelled active background task for thread {thread_id}")
+            RUNNING_TASKS.pop(thread_id, None)
+
+        # 2. Purge in-memory progressive tracker
+        if thread_id in PROGRESS_TRACKER:
+            del PROGRESS_TRACKER[thread_id]
+            print(f"🧹 Purged progress tracker for thread {thread_id}")
+
+        # 3. Purge PostgreSQL checkpointer checkpoints, blobs, and writes
+        if hasattr(req.app.state, "db_pool") and req.app.state.db_pool:
+            try:
+                async with req.app.state.db_pool.connection() as conn:
+                    async with conn.cursor() as cur:
+                        await cur.execute("DELETE FROM checkpoints WHERE thread_id = %s", (thread_id,))
+                        await cur.execute("DELETE FROM checkpoint_blobs WHERE thread_id = %s", (thread_id,))
+                        await cur.execute("DELETE FROM checkpoint_writes WHERE thread_id = %s", (thread_id,))
+                print(f"🗄️ Cleaned all checkpointer DB entries for thread {thread_id}")
+            except Exception as dbe:
+                print(f"⚠️ Warning: Could not clean Postgres checkpoints from Saver: {dbe}")
+
+        # 4. Clean SQL history entry from generated_papers table
+        try:
+            db.table("generated_papers").delete().eq("thread_id", thread_id).execute()
+            print(f"🗃️ Deleted metadata entry from generated_papers for thread {thread_id}")
+        except Exception as sqle:
+            print(f"⚠️ Warning: Could not delete generated_papers metadata: {sqle}")
+
+        # 5. Clean cloud Supabase Storage assets
+        try:
+            db.storage.from_("question-papers").remove([
+                f"{thread_id}/paper.pdf",
+                f"{thread_id}/answer.pdf",
+                f"{thread_id}/paper.docx"
+            ])
+            print(f"☁️ Purged cloud storage assets for thread {thread_id}")
+        except Exception as storee:
+            print(f"⚠️ Warning: Cloud storage assets not found or could not be removed: {storee}")
+
+        # 6. Clean local outputs cache directory
+        local_dir = f"outputs/{thread_id}"
+        if os.path.exists(local_dir):
+            shutil.rmtree(local_dir, ignore_errors=True)
+            print(f"📂 Purged local server caches: {local_dir}")
+
+        return {"status": "cancelled", "message": f"Successfully aborted and cleaned up thread {thread_id} completely."}
+
+    except Exception as e:
+        print(f"❌ Error during active session cancellation: {e}")
+        raise HTTPException(status_code=500, detail="Failed to cancel and clean up generation session")
     
