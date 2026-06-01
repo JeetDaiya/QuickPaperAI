@@ -1,6 +1,6 @@
-from graph.builder import graph
+from core.graph.builder import graph
 from langgraph.types import Command
-from models.schemas import QuestionTypes, PaperRequest
+from core.models.schemas import QuestionTypes, PaperRequest
 from psycopg_pool import AsyncConnectionPool
 from psycopg.rows import dict_row
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver

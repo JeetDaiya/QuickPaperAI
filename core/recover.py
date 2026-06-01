@@ -5,7 +5,7 @@ from psycopg.rows import dict_row
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.types import Command
 
-from graph.builder import graph
+from core.graph.builder import graph
 
 # You MUST use the exact same thread_id that crashed!
 CRASHED_THREAD_ID = "thread_12"

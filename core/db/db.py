@@ -1,4 +1,4 @@
-from config.settings import SUPABASE_KEY, SUPABASE_URL
+from core.config.settings import SUPABASE_KEY, SUPABASE_URL
 from supabase import create_client, Client
 
 

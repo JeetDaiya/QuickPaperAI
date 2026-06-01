@@ -1,4 +1,4 @@
-from models.schemas import Question, PaperRequest, QuestionTypes
+from core.models.schemas import Question, PaperRequest, QuestionTypes
 from datetime import date
 from collections import OrderedDict
 import asyncio

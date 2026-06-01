@@ -84,7 +84,7 @@ async def question_generator_node(state: ChapterState) -> dict:
     """
     Fetches chapter chunks, groups by sub-topic, and generates questions per topic group.
     """
-    from models.schemas import QuestionTypes
+    from core.models.schemas import QuestionTypes
     question_list : list[Question] = []
     
     chapter = state["chapter"]
@@ -92,6 +92,7 @@ async def question_generator_node(state: ChapterState) -> dict:
     objective_count = state["objective_count"]
     subjective_count = state["subjective_count"]
     allowed_types = state["allowed_types"]
+    thread_id = state["thread_id"]
     
     allowed_objective_types = [t for t in allowed_types if t.is_objective]
     allowed_subjective_types = [t for t in allowed_types if t.is_subjective]
@@ -279,11 +280,27 @@ def pdf_node(state: PaperState):
     paper_html = generate_paper_html(paper_request=state["paper_request"], selected_questions=selected_questions)
     answer_html = generate_answer_html(paper_request=state["paper_request"], selected_questions=selected_questions)
 
-    # 1. Compile PDFs
-    generate_pdf(paper_string=paper_html, answer_string=answer_html, answer_output_path=f'{output_dir}/answer.pdf', paper_output_path=f'{output_dir}/paper.pdf')
-    
-    # 2. Compile DOCX
-    generate_docx(selected_questions=selected_questions, paper_request=state["paper_request"], output_path=f'{output_dir}/paper.docx')
+    # 1. Compile PDFs (Critical)
+    try:
+        generate_pdf(
+            paper_string=paper_html, 
+            answer_string=answer_html, 
+            answer_output_path=f'{output_dir}/answer.pdf', 
+            paper_output_path=f'{output_dir}/paper.pdf'
+        )
+    except Exception as e:
+        print(f"❌ Critical Failure: Failed to generate PDF documents: {e}")
+        raise e
+        
+    # 2. Compile DOCX (Soft Isolation - non-critical)
+    try:
+        generate_docx(
+            selected_questions=selected_questions, 
+            paper_request=state["paper_request"], 
+            output_path=f'{output_dir}/paper.docx'
+        )
+    except Exception as e:
+        print(f"⚠️ Soft Failure: Failed to generate DOCX document (continuing gracefully): {e}")
     
     
     

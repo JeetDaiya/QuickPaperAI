@@ -1,5 +1,5 @@
 from typing import TypedDict, Annotated
-from models.schemas import Question, PaperRequest, QuestionTypes
+from core.models.schemas import Question, PaperRequest, QuestionTypes
 import operator
 
 
