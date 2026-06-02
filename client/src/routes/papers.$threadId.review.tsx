@@ -144,6 +144,7 @@ function ReviewPage() {
   const { threadId } = Route.useParams();
   const navigate = useNavigate();
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [activeChapter, setActiveChapter] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -168,8 +169,17 @@ function ReviewPage() {
   }, [indexed]);
 
   const chapters = useMemo(() => {
-    return Object.keys(byChapter).sort();
+    return Object.keys(byChapter).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
+    );
   }, [byChapter]);
+
+  // Default active chapter selection
+  useEffect(() => {
+    if (chapters.length > 0 && (!activeChapter || !chapters.includes(activeChapter))) {
+      setActiveChapter(chapters[0]);
+    }
+  }, [chapters, activeChapter]);
 
   const targets = reviewData?.targets ?? { objective: 0, subjective: 0 };
   const tally = useMemo(
@@ -259,29 +269,76 @@ function ReviewPage() {
             No candidates were generated.
           </p>
         ) : (
-          <div className="mt-10 space-y-16">
-            {chapters.map((chapterName) => {
-              const chapterQuestions = byChapter[chapterName];
-              const sortedQuestions = sortBySection(chapterQuestions);
-              const sel = chapterQuestions.filter((s) => selected.has(s.index)).length;
+          <div className="mt-10">
+            {/* Horizontal Scrollable Tabs */}
+            <div className="border-b border-[var(--paper-rule)] relative">
+              <div className="flex items-center gap-2 overflow-x-auto pb-2.5 tabs-scroll pr-16 select-none">
+                {chapters.map((chName) => {
+                  const isActive = chName === activeChapter;
+                  const totalInCh = byChapter[chName]?.length ?? 0;
+                  const pickedInCh = byChapter[chName]?.filter((item) => selected.has(item.index)).length ?? 0;
+                  
+                  // Extract chapter number
+                  const numMatch = chName.match(/\d+/);
+                  const chNumber = numMatch ? numMatch[0] : chName;
+
+                  return (
+                    <button
+                      key={chName}
+                      type="button"
+                      onClick={() => setActiveChapter(chName)}
+                      className={`relative px-6 py-4 font-mono text-sm uppercase tracking-wider transition-all select-none border-t border-x rounded-t-sm flex items-center gap-2.5 cursor-pointer shrink-0 ${
+                        isActive
+                          ? "border-[var(--paper-rule)] bg-[var(--card)] text-[var(--paper-foreground)] font-extrabold stamp-shadow -mb-px z-10"
+                          : "border-transparent bg-transparent text-[var(--graphite)]/60 hover:text-[var(--graphite)] hover:bg-[var(--graphite)]/5"
+                      }`}
+                    >
+                      {isActive && (
+                        <span className="h-2 w-2 rounded-full bg-[var(--vermillion)] animate-pulse" />
+                      )}
+                      <span>
+                        <span className={isActive ? "text-[var(--vermillion)] font-black" : ""}>{chNumber}</span>
+                      </span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-sans ${
+                        isActive
+                          ? "bg-[var(--vermillion)]/10 text-[var(--vermillion)] font-extrabold"
+                          : "bg-[var(--graphite)]/10 text-[var(--graphite)]/70"
+                      }`}>
+                        {pickedInCh}/{totalInCh}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="absolute right-0 top-0 bottom-2.5 w-16 bg-gradient-to-l from-[var(--paper)] via-[var(--paper)]/80 to-transparent pointer-events-none flex items-center justify-end">
+                <span className="text-[9px] font-mono uppercase tracking-widest text-[var(--graphite)]/55 pr-2 bg-[var(--paper)]/60 px-1 py-0.5 rounded-sm">
+                  scroll →
+                </span>
+              </div>
+            </div>
+
+            {/* Selected Chapter Questions */}
+            {activeChapter && byChapter[activeChapter] && (() => {
+              const numMatch = activeChapter.match(/\d+/);
+              const chNumber = numMatch ? numMatch[0] : activeChapter;
               return (
-                <section key={chapterName} className="border-t border-[var(--paper-rule)] pt-10 first:border-none first:pt-0">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <div className="mt-10 animate-shuffle">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--paper-rule)] pb-4">
                     <h2 className="font-serif text-3xl text-[var(--paper-foreground)]">
-                      {chapterName}
+                      Chapter {chNumber}
                     </h2>
                     <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--graphite)]">
-                      {sel}/{chapterQuestions.length} picked
+                      {byChapter[activeChapter].filter((s) => selected.has(s.index)).length}/{byChapter[activeChapter].length} picked
                     </span>
                   </div>
                   <ChapterStack
-                    items={sortedQuestions}
+                    items={sortBySection(byChapter[activeChapter])}
                     selected={selected}
                     onToggle={toggle}
                   />
-                </section>
+                </div>
               );
-            })}
+            })()}
           </div>
         )}
 
@@ -583,34 +640,45 @@ function IndexCard({
         <div className="mt-4">
           <button
             onClick={() => setOpen((v) => !v)}
-            className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--graphite)] hover:text-[var(--vermillion)]"
+            className="flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-[var(--graphite)] hover:text-[var(--vermillion)] border border-[var(--paper-rule)] hover:border-[var(--vermillion)] rounded px-2.5 py-1 bg-[var(--card)] transition-colors select-none cursor-pointer"
           >
-            {open ? "▾" : "▸"} answer key
-            {hasEvalScheme
-              ? ` · ${candidate.evaluation_scheme.length}-point scheme`
-              : ""}
+            <span className="text-[9px]">{open ? "▼" : "▶"}</span>
+            <span>Answer Key</span>
+            {hasEvalScheme && (
+              <span className="ml-1 text-[9px] bg-[var(--vermillion)]/10 text-[var(--vermillion)] px-1.5 py-0.5 rounded-sm font-sans font-bold">
+                {candidate.evaluation_scheme.length} pts
+              </span>
+            )}
           </button>
           {open ? (
-            <div className="mt-2 border-l-2 border-[var(--vermillion)] bg-[var(--accent)]/40 p-3">
-              <p className="font-serif text-sm italic">
+            <div className="mt-3 border-l-4 border-[var(--vermillion)] bg-[var(--card)] stamp-shadow p-4 rounded-r-md">
+              <div className="font-mono text-[10px] uppercase tracking-wider text-[var(--vermillion)] font-bold mb-2">
+                Ideal Answer
+              </div>
+              <div className="font-serif text-base text-[var(--paper-foreground)] leading-relaxed">
                 <Latex text={candidate.answer} />
-              </p>
+              </div>
               {hasEvalScheme ? (
-                <ul className="mt-3 space-y-1">
-                  {candidate.evaluation_scheme.map((p, i) => (
-                    <li
-                      key={i}
-                      className="flex items-baseline gap-2 font-mono text-[11px]"
-                    >
-                      <span className="text-[var(--vermillion)]">
-                        +{p.allocated_marks}
-                      </span>
-                      <span className="text-[var(--paper-foreground)]/80">
-                        <Latex text={p.point_text} />
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                <div className="mt-4 border-t border-[var(--paper-rule)] pt-3">
+                  <div className="font-mono text-[10px] uppercase tracking-wider text-[var(--graphite)] font-bold mb-2">
+                    Marking Scheme
+                  </div>
+                  <ul className="space-y-2">
+                    {candidate.evaluation_scheme.map((p, i) => (
+                      <li
+                        key={i}
+                        className="flex items-baseline gap-2.5 text-sm"
+                      >
+                        <span className="font-mono font-bold text-[var(--vermillion)] bg-[var(--vermillion)]/10 px-1.5 py-0.5 rounded text-xs shrink-0">
+                          +{p.allocated_marks}
+                        </span>
+                        <span className="text-[var(--paper-foreground)]/90 leading-relaxed">
+                          <Latex text={p.point_text} />
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ) : null}
             </div>
           ) : null}

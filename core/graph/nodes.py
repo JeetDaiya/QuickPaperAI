@@ -1,5 +1,5 @@
 from core.graph.state import PaperState, ChapterState
-from core.config.prompts import QUESTION_GENERATOR_SYSTEM_PROMPT
+from core.config.prompts import QUESTION_GENERATOR_SCIENCE_SYSTEM_PROMPT, QUESTION_GENERATOR_SYSTEM_SS_PROMPT
 from core.config.settings import generator_model
 from core.models.schemas import BatchOutput, Question
 from core.db.db import get_chapter_chunks
@@ -159,8 +159,13 @@ async def question_generator_node(state: ChapterState) -> dict:
             f"You are strictly allowed to generate only these question types: {allowed_all_values}."
         )
 
+    if subject == "ss":
+        system_prompt = QUESTION_GENERATOR_SYSTEM_SS_PROMPT
+    else :
+        system_prompt = QUESTION_GENERATOR_SCIENCE_SYSTEM_PROMPT
+    
     generator_prompt = ChatPromptTemplate([
-        ("system", QUESTION_GENERATOR_SYSTEM_PROMPT),
+        ("system", system_prompt),
         ("human", (
             "TEXTBOOK CONTENT:\n{formatted_chunks}\n\n"
             "PREVIOUSLY GENERATED QUESTIONS (avoid repeating these):\n{previous_questions}\n\n"
@@ -200,6 +205,7 @@ async def question_generator_node(state: ChapterState) -> dict:
 
     # ── Post-process to fix LaTeX carriage return/tab JSON decoding issues system-wide ──
     for q in question_list:
+        q.chapter = str(chapter)
         q.question_text = clean_latex(q.question_text)
         if q.options:
             q.options = [clean_latex(opt) for opt in q.options]

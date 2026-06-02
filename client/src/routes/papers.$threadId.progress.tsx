@@ -57,6 +57,7 @@ function ProgressPage() {
       ? Object.values(data.progress ?? {})
       : [];
 
+  const totalGenerated = chapters.reduce((sum, ch) => sum + (ch.generated_count ?? 0), 0);
   const failedChapters = chapters.filter((c) => c.status === "failed");
 
   return (
@@ -70,14 +71,21 @@ function ProgressPage() {
               Sheet 02 — Live ledger
             </p>
             <h1 className="mt-3 font-serif text-5xl">
-              The pipeline is running<span className="cursor-blink" />
+              The questions are being generated<span className="cursor-blink" />
             </h1>
             <p className="mt-3 max-w-xl text-sm text-[var(--ink-foreground)]/70">
-              Each chapter runs{" "}
-              <span className="font-mono">retrieve → distil → compile</span>{" "}
-              concurrently. You'll be pulled into the review desk the moment
-              candidates are ready.
+              You'll be pulled into the review desk the moment
+              questions are ready.
             </p>
+            {totalGenerated > 0 && (
+              <div className="mt-4 inline-flex items-center gap-2 border border-[var(--vermillion-soft)]/20 bg-[var(--vermillion-soft)]/10 px-3.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-[var(--vermillion-soft)]">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--vermillion-soft)] opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[var(--vermillion-soft)]"></span>
+                </span>
+                <span>{totalGenerated} questions generated</span>
+              </div>
+            )}
           </div>
           <div className="hidden text-right font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--ink-foreground)]/40 md:block">
             thread
@@ -101,10 +109,9 @@ function ProgressPage() {
             <p className="font-mono text-xs uppercase tracking-[0.2em] opacity-60">
               Initializing thread — opening the ledger…
             </p>
-            <div className="mt-6 h-px w-48 bg-[var(--ink-rule)] overflow-hidden">
+            <div className="mt-6 h-2 w-48 rounded-full bg-[var(--ink-rule)]/10 overflow-hidden">
               <div
-                className="h-full w-1/3 animate-ledger"
-                style={{ background: "var(--vermillion)" }}
+                className="h-full w-1/3 rounded-full animate-pulse bg-[var(--vermillion)]"
               />
             </div>
           </div>
@@ -116,7 +123,7 @@ function ProgressPage() {
                 data.error ??
                 (failedChapters.length > 0
                   ? `${failedChapters.length} chapter(s) failed during generation.`
-                  : "Generation failed before any candidates were produced.")
+                  : "Generation failed before any questions were produced.")
               }
             />
             {chapters.length > 0 && (
@@ -179,15 +186,13 @@ function StitchedLedger({ chapters }: { chapters: ChapterProgress[] }) {
               {String(i + 1).padStart(2, "0")}
             </div>
             <div>
-              <div className="flex items-baseline justify-between gap-4">
+              <div className="flex items-center justify-between gap-4">
                 <h3 className="font-serif text-2xl leading-tight">
                   {ch.chapter}
                 </h3>
-                <div className="font-mono text-[11px] uppercase tracking-[0.18em]">
-                  <span className="text-[var(--vermillion-soft)]">
-                    {ch.generated_count}
-                  </span>
-                  <span className="opacity-50"> · candidates</span>
+                <div className="flex items-center gap-1.5 border border-[var(--vermillion-soft)]/30 bg-[var(--vermillion-soft)]/10 px-3 py-1 font-mono text-[11px] uppercase tracking-wider text-[var(--vermillion-soft)] rounded-sm shadow-[0_0_12px_rgba(180,60,40,0.15)]">
+                  <span className="text-sm font-bold">{ch.generated_count}</span>
+                  <span className="opacity-70 text-[9px] tracking-normal">questions</span>
                 </div>
               </div>
               <div className="mt-2 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--ink-foreground)]/40">
@@ -199,16 +204,16 @@ function StitchedLedger({ chapters }: { chapters: ChapterProgress[] }) {
                       ? "● processing"
                       : "○ pending"}
               </div>
-              <div className="mt-3 relative h-px bg-[var(--ink-rule)]">
+              <div className="mt-3.5 relative h-2 w-full rounded-full bg-[var(--ink-rule)]/10 overflow-hidden">
                 <div
-                  className="absolute inset-y-0 left-0 h-[2px] -top-px animate-ledger"
+                  className={`h-full rounded-full transition-all duration-500 ${!isDone && !isFailed ? "animate-pulse" : ""}`}
                   style={{
                     width: `${pct * 100}%`,
                     background: isFailed
                       ? "var(--vermillion)"
                       : isDone
                         ? "var(--vermillion-soft)"
-                        : "linear-gradient(90deg, var(--vermillion) 0%, transparent 100%)",
+                        : "linear-gradient(90deg, var(--vermillion) 0%, var(--vermillion-soft) 100%)",
                   }}
                 />
               </div>
