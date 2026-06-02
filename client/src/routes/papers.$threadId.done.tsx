@@ -1,10 +1,24 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { DeskHeader } from "@/components/desk-header";
 import { api } from "@/lib/api";
 
 export const Route = createFileRoute("/papers/$threadId/done")({
+  beforeLoad: ({ location }) => {
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw redirect({
+          to: "/login",
+          search: {
+            redirect: location.href,
+            message: "auth_required",
+          },
+        });
+      }
+    }
+  },
   head: () => ({
     meta: [
       { title: "Paper ready — QuickPaperAI" },

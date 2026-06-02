@@ -122,3 +122,4 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+authentication.md

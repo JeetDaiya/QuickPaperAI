@@ -1,7 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { DeskHeader } from "@/components/desk-header";
 import { loadDrafts, type DraftRecord, getActiveThread } from "@/lib/drafts";
+import { api } from "@/lib/api";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -20,11 +22,21 @@ export const Route = createFileRoute("/")({
 function Home() {
   const [drafts, setDrafts] = useState<DraftRecord[]>([]);
   const [active, setActive] = useState<string | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     setDrafts(loadDrafts());
     setActive(getActiveThread());
+    if (typeof window !== "undefined") {
+      setIsLoggedIn(!!localStorage.getItem("token"));
+    }
   }, []);
+
+  const { data: historyData, isLoading: historyLoading } = useQuery({
+    queryKey: ["history"],
+    queryFn: () => api.getHistory(),
+    enabled: isLoggedIn,
+  });
 
   return (
     <div className="min-h-screen surface-paper">
@@ -127,6 +139,78 @@ function Home() {
               ))
             )}
           </ul>
+        </section>
+
+        <section className="mt-20 grid gap-10 md:grid-cols-[2fr_3fr] border-t border-[var(--paper-rule)] pt-16">
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-[var(--graphite)]">
+              Cloud vault
+            </p>
+            <h2 className="mt-2 font-serif text-3xl">Review history</h2>
+            <p className="mt-3 text-sm text-[var(--graphite)]">
+              Your generated exam papers stored securely in the cloud.
+            </p>
+          </div>
+
+          <div>
+            {!isLoggedIn ? (
+              <div className="rounded-sm border border-dashed border-[var(--paper-rule)] bg-[var(--card)] px-5 py-6 text-sm text-[var(--graphite)]">
+                <span className="font-mono uppercase tracking-[0.18em] text-[10px] opacity-70">
+                  🔐 Credentials required
+                </span>
+                <p className="mt-2">
+                  Please{" "}
+                  <Link to="/login" search={{ redirect: "/" }} className="text-[var(--vermillion)] hover:underline-hand pb-0.5">
+                    sign in
+                  </Link>{" "}
+                  to view your cloud-saved history.
+                </p>
+              </div>
+            ) : historyLoading ? (
+              <div className="rounded-sm border border-dashed border-[var(--paper-rule)] bg-[var(--card)] px-5 py-6 text-sm text-[var(--graphite)]">
+                <p className="animate-pulse">Loading cloud vault records…</p>
+              </div>
+            ) : !historyData?.history || historyData.history.length === 0 ? (
+              <div className="rounded-sm border border-dashed border-[var(--paper-rule)] bg-[var(--card)] px-5 py-6 text-sm text-[var(--graphite)]">
+                <span className="font-mono uppercase tracking-[0.18em] text-[10px] opacity-70">
+                  — vault empty —
+                </span>
+                <p className="mt-2">
+                  No cloud-saved papers found. Save your papers to the cloud from the final step!
+                </p>
+              </div>
+            ) : (
+              <ul className="space-y-3">
+                {historyData.history.map((h) => (
+                  <li key={h.thread_id}>
+                    <Link
+                      to="/papers/$threadId/done"
+                      params={{ threadId: h.thread_id }}
+                      className="group flex items-baseline justify-between gap-4 border-b border-[var(--paper-rule)] py-4 transition hover:bg-[var(--card)]"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate font-serif text-xl">
+                          {h.institution_name || h.subject || "Untitled Paper"}
+                        </div>
+                        <div className="mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--graphite)]">
+                          {h.subject} · {h.standard}
+                        </div>
+                      </div>
+                      <div className="shrink-0 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--graphite)] opacity-70 group-hover:opacity-100">
+                        {new Date(h.created_at).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                        <span className="ml-2 opacity-60 group-hover:translate-x-0.5 inline-block transition">
+                          →
+                        </span>
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </section>
       </main>
     </div>

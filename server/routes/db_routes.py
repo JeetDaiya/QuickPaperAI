@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Depends, Request, HTTPException
 from server.db import db
 import os
+
+from server.dependencies import get_current_user
 
 
 db_router = APIRouter(prefix="/api/db")
@@ -19,16 +21,14 @@ async def get_chapters():
         raise HTTPException(status_code=500, detail=str(e))
 
 @db_router.get("/history")
-async def get_history():
-    
-    dummy_user_id = os.getenv("DUMMY_USER_ID", "550e8400-e29b-41d4-a716-446655440000").strip('"')
-    
+async def get_history(current_user : dict = Depends(get_current_user)):
     try:
+        user_id = str(current_user["id"])
         # Query generated papers sorted by created_at DESC
         res = (
             db.table("generated_papers")
             .select("*")
-            .eq("user_id", dummy_user_id)
+            .eq("user_id", user_id)
             .order("created_at", desc=True)
             .execute()
         )

@@ -9,15 +9,27 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SignupRouteImport } from './routes/signup'
 import { Route as NewRouteImport } from './routes/new'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PapersThreadIdReviewRouteImport } from './routes/papers.$threadId.review'
 import { Route as PapersThreadIdProgressRouteImport } from './routes/papers.$threadId.progress'
 import { Route as PapersThreadIdDoneRouteImport } from './routes/papers.$threadId.done'
 
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NewRoute = NewRouteImport.update({
   id: '/new',
   path: '/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -43,14 +55,18 @@ const PapersThreadIdDoneRoute = PapersThreadIdDoneRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/new': typeof NewRoute
+  '/signup': typeof SignupRoute
   '/papers/$threadId/done': typeof PapersThreadIdDoneRoute
   '/papers/$threadId/progress': typeof PapersThreadIdProgressRoute
   '/papers/$threadId/review': typeof PapersThreadIdReviewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/new': typeof NewRoute
+  '/signup': typeof SignupRoute
   '/papers/$threadId/done': typeof PapersThreadIdDoneRoute
   '/papers/$threadId/progress': typeof PapersThreadIdProgressRoute
   '/papers/$threadId/review': typeof PapersThreadIdReviewRoute
@@ -58,7 +74,9 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/new': typeof NewRoute
+  '/signup': typeof SignupRoute
   '/papers/$threadId/done': typeof PapersThreadIdDoneRoute
   '/papers/$threadId/progress': typeof PapersThreadIdProgressRoute
   '/papers/$threadId/review': typeof PapersThreadIdReviewRoute
@@ -67,21 +85,27 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/login'
     | '/new'
+    | '/signup'
     | '/papers/$threadId/done'
     | '/papers/$threadId/progress'
     | '/papers/$threadId/review'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/login'
     | '/new'
+    | '/signup'
     | '/papers/$threadId/done'
     | '/papers/$threadId/progress'
     | '/papers/$threadId/review'
   id:
     | '__root__'
     | '/'
+    | '/login'
     | '/new'
+    | '/signup'
     | '/papers/$threadId/done'
     | '/papers/$threadId/progress'
     | '/papers/$threadId/review'
@@ -89,7 +113,9 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  LoginRoute: typeof LoginRoute
   NewRoute: typeof NewRoute
+  SignupRoute: typeof SignupRoute
   PapersThreadIdDoneRoute: typeof PapersThreadIdDoneRoute
   PapersThreadIdProgressRoute: typeof PapersThreadIdProgressRoute
   PapersThreadIdReviewRoute: typeof PapersThreadIdReviewRoute
@@ -97,11 +123,25 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/new': {
       id: '/new'
       path: '/new'
       fullPath: '/new'
       preLoaderRoute: typeof NewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -137,7 +177,9 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  LoginRoute: LoginRoute,
   NewRoute: NewRoute,
+  SignupRoute: SignupRoute,
   PapersThreadIdDoneRoute: PapersThreadIdDoneRoute,
   PapersThreadIdProgressRoute: PapersThreadIdProgressRoute,
   PapersThreadIdReviewRoute: PapersThreadIdReviewRoute,

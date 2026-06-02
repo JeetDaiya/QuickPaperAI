@@ -13,7 +13,9 @@ from jose import JWTError, jwt
 
 from server.core.config import SECRET_KEY, ALGORITHM
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl='auth/login')
+from fastapi import Request
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl='auth/login', auto_error=False)
 
 compiled_agent = None
 @asynccontextmanager
@@ -45,12 +47,19 @@ async def lifespan(app : FastAPI):
     
     await pool.close()
     
-def get_current_user(token: str = Depends(oauth2_scheme)):
+def get_current_user(request: Request, token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    
+    # Fallback to query parameter if header token is missing
+    if not token:
+        token = request.query_params.get("token")
+        
+    if not token:
+        raise credentials_exception
     
     try:
         payload = jwt.decode(token, key=SECRET_KEY, algorithms=[ALGORITHM])

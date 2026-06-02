@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, redirect } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { DeskHeader } from "@/components/desk-header";
@@ -11,6 +11,20 @@ import {
 import type { QuestionCandidate } from "@/lib/types";
 
 export const Route = createFileRoute("/papers/$threadId/review")({
+  beforeLoad: ({ location }) => {
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw redirect({
+          to: "/login",
+          search: {
+            redirect: location.href,
+            message: "auth_required",
+          },
+        });
+      }
+    }
+  },
   head: () => ({
     meta: [
       { title: "Review — QuickPaperAI" },

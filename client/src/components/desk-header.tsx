@@ -1,9 +1,11 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 
 interface DeskHeaderProps {
   variant?: "paper" | "ink";
   threadId?: string;
   step?: 1 | 2 | 3 | 4;
+  hideNav?: boolean;
 }
 
 const STEPS = [
@@ -13,8 +15,23 @@ const STEPS = [
   { n: 4, label: "Export" },
 ] as const;
 
-export function DeskHeader({ variant = "paper", step }: DeskHeaderProps) {
+export function DeskHeader({ variant = "paper", step, hideNav = false }: DeskHeaderProps) {
   const onInk = variant === "ink";
+  const navigate = useNavigate();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsLoggedIn(!!localStorage.getItem("token"));
+    }
+  }, []);
+
+  const handleSignOut = () => {
+    localStorage.removeItem("token");
+    setIsLoggedIn(false);
+    navigate({ to: "/login" });
+  };
+
   return (
     <header
       className={`border-b ${onInk ? "border-[var(--ink-rule)]" : "border-[var(--paper-rule)]"}`}
@@ -63,13 +80,21 @@ export function DeskHeader({ variant = "paper", step }: DeskHeaderProps) {
               );
             })}
           </ol>
-        ) : (
-          <nav className="font-mono text-xs uppercase tracking-[0.2em] opacity-70">
+        ) : !hideNav ? (
+          <nav className="flex items-center gap-6 font-mono text-xs uppercase tracking-[0.2em] opacity-70">
             <Link to="/new" className="hover:underline-hand pb-1">
               New paper
             </Link>
+            {isLoggedIn && (
+              <button
+                onClick={handleSignOut}
+                className="hover:underline-hand pb-1 text-[var(--vermillion)] cursor-pointer bg-transparent border-none p-0 outline-none"
+              >
+                Sign out
+              </button>
+            )}
           </nav>
-        )}
+        ) : null}
       </div>
     </header>
   );

@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, redirect } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { DeskHeader } from "@/components/desk-header";
@@ -15,6 +15,20 @@ import type {
 } from "@/lib/types";
 
 export const Route = createFileRoute("/new")({
+  beforeLoad: ({ location }) => {
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw redirect({
+          to: "/login",
+          search: {
+            redirect: location.href,
+            message: "auth_required",
+          },
+        });
+      }
+    }
+  },
   head: () => ({
     meta: [
       { title: "New Paper — QuickPaperAI" },
@@ -50,6 +64,88 @@ function NewPaper() {
   const [subjectiveCount, setSubjectiveCount] = useState(3);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [unsavedState, setUnsavedState] = useState<any>(null);
+  const [isRestoredOrStarted, setIsRestoredOrStarted] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("qpa.unsaved_new_paper_state");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.institutionName || parsed.chapters?.length > 0) {
+            setUnsavedState(parsed);
+          } else {
+            setIsRestoredOrStarted(true);
+          }
+        } catch (e) {
+          setIsRestoredOrStarted(true);
+        }
+      } else {
+        setIsRestoredOrStarted(true);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isRestoredOrStarted && typeof window !== "undefined") {
+      const stateObj = {
+        institutionName,
+        subject,
+        standard,
+        chapters,
+        difficulty,
+        mode,
+        allowedTypes,
+        objectiveCount,
+        subjectiveCount,
+      };
+      if (institutionName.trim() || chapters.length > 0) {
+        localStorage.setItem("qpa.unsaved_new_paper_state", JSON.stringify(stateObj));
+      } else {
+        localStorage.removeItem("qpa.unsaved_new_paper_state");
+      }
+    }
+  }, [
+    isRestoredOrStarted,
+    institutionName,
+    subject,
+    standard,
+    chapters,
+    difficulty,
+    mode,
+    allowedTypes,
+    objectiveCount,
+    subjectiveCount,
+  ]);
+
+  const handleRestore = () => {
+    if (unsavedState) {
+      setInstitutionName(unsavedState.institutionName || "");
+      setSubject(unsavedState.subject || "");
+      setStandard(unsavedState.standard || "");
+      setChapters(unsavedState.chapters || []);
+      setDifficulty(unsavedState.difficulty || "Balanced");
+      setMode(unsavedState.mode || "Balanced Standard Mode");
+      setAllowedTypes(
+        unsavedState.allowedTypes ||
+          MODE_ALLOWED[(unsavedState.mode as PaperTypeMode) || "Balanced Standard Mode"]
+      );
+      setObjectiveCount(unsavedState.objectiveCount ?? 5);
+      setSubjectiveCount(unsavedState.subjectiveCount ?? 3);
+      setUnsavedState(null);
+      setIsRestoredOrStarted(true);
+    }
+  };
+
+  const handleDiscard = () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("qpa.unsaved_new_paper_state");
+    }
+    setUnsavedState(null);
+    setIsRestoredOrStarted(true);
+  };
 
   // Fetch chapters and syllabus mapping directly from database chunks
   const { data: dbMetadata, isLoading: loadingMetadata } = useQuery({
@@ -146,6 +242,9 @@ function NewPaper() {
     setSubmitting(true);
     try {
       const { thread_id } = await api.generate(payload);
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("qpa.unsaved_new_paper_state");
+      }
       upsertDraft({
         threadId: thread_id,
         institution: payload.institution_name,
@@ -183,6 +282,32 @@ function NewPaper() {
           field maps to a backend constraint — invalid combinations are
           disabled here so nothing reaches the generator wrong.
         </p>
+
+        {unsavedState && (
+          <div className="mt-8 border border-[var(--vermillion)] bg-[var(--vermillion)]/5 px-4 py-4 font-mono text-xs text-[var(--vermillion)] flex flex-wrap justify-between items-center gap-4 stamp-shadow animate-shuffle">
+            <div>
+              <span className="font-bold mr-1">📝 Recovered Paper Plan:</span>
+              We recovered an unfinished setup for "{unsavedState.institutionName || "Untitled"}".
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={handleRestore}
+                className="underline font-bold cursor-pointer bg-transparent border-none text-[var(--vermillion)] p-0 hover:text-[var(--ink)] transition-colors"
+              >
+                Restore settings
+              </button>
+              <span className="opacity-50">·</span>
+              <button
+                type="button"
+                onClick={handleDiscard}
+                className="underline cursor-pointer bg-transparent border-none text-[var(--graphite)] p-0 hover:text-[var(--ink)] transition-colors"
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
 
         <form onSubmit={onSubmit} className="mt-10 space-y-10">
           <FieldRow n={1} label="Institution">

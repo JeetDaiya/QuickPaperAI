@@ -1,4 +1,4 @@
-from fastapi import FastAPI, BackgroundTasks, Request, APIRouter, HTTPException
+from fastapi import Depends, FastAPI, BackgroundTasks, Request, APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from core.models.schemas import PaperRequest
 from core.graph.runner import run_graph
@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from langgraph.types import Command
 from langgraph.graph.state import CompiledStateGraph
 from server.db import db
+from server.dependencies import get_current_user
 
 paper_router = APIRouter(prefix='/api')
 
@@ -45,7 +46,7 @@ async def graph_runner(agent, thread_id: str, request: PaperRequest):
                 generated_count=0
             )
 
-async def upload_completed_paper_to_storage(thread_id : str, agent : CompiledStateGraph, config : dict):
+async def upload_completed_paper_to_storage(thread_id : str, agent : CompiledStateGraph, config : dict, user_id : str):
 
     try:
         snapshot = await agent.aget_state(config)
@@ -112,10 +113,8 @@ async def upload_completed_paper_to_storage(thread_id : str, agent : CompiledSta
                     print(f"❌ Failed to upload {filename}: {e}")
                     return {"status": "failed"}
 
-        dummy_user_id = os.getenv("DUMMY_USER_ID", "550e8400-e29b-41d4-a716-446655440000").strip('"')
-
         insert_data = {
-            "user_id" : dummy_user_id,
+            "user_id" : user_id,
             "thread_id" : thread_id,
             "institution_name" : institution_name,
             "subject" : subject,
@@ -142,7 +141,7 @@ async def upload_completed_paper_to_storage(thread_id : str, agent : CompiledSta
     
     
 @paper_router.post('/generate')
-async def generate_paper(req : Request, paper_request : PaperRequest):
+async def generate_paper(req : Request, paper_request : PaperRequest, current_user : dict = Depends(get_current_user)):
     thread_id = str(uuid.uuid4())
 
     # 1. Initialize pending status for all chapters
@@ -164,7 +163,7 @@ async def generate_paper(req : Request, paper_request : PaperRequest):
     
 
 @paper_router.post('/resume/{thread_id}')
-async def resume_generation(thread_id: str, payload: ResumeRequest, req: Request):
+async def resume_generation(thread_id: str, payload: ResumeRequest, req: Request, current_user : dict = Depends(get_current_user)):
     """Feeds approved question indices and resumes the execution."""
     agent = req.app.state.agent
     config = {"configurable": {"thread_id": thread_id}}
@@ -200,7 +199,7 @@ async def resume_generation(thread_id: str, payload: ResumeRequest, req: Request
 
 
 @paper_router.get('/status/{thread_id}')
-async def get_generation_status(thread_id: str, req: Request):
+async def get_generation_status(thread_id: str, req: Request, current_user : dict = Depends(get_current_user)):
     """Polled by client to fetch live counts or review prompts."""
     agent = req.app.state.agent
     config = {"configurable": {"thread_id": thread_id}}
@@ -276,7 +275,7 @@ async def get_generation_status(thread_id: str, req: Request):
 
 
 @paper_router.get('/download/{thread_id}/{filename}')
-async def download_file(thread_id: str, filename: str, preview: bool = False):
+async def download_file(thread_id: str, filename: str, preview: bool = False, current_user : dict = Depends(get_current_user)):
     """Streams compiled paper/answer key files securely. Supports inline browser previewing."""
     output_dir = f"outputs/{thread_id}"
     local_path = f"{output_dir}/{filename}"
@@ -332,19 +331,19 @@ async def download_file(thread_id: str, filename: str, preview: bool = False):
         print(f"❌ Error recovering file from Supabase: {e}")
         raise HTTPException(status_code=500, detail="Failed to recover file from Supabase")
     
-@paper_router.post('/save-to-cloud/{thread_id}')
-async def save_to_cloud(thread_id: str, req: Request):
+@paper_router.post('/save-to-cloud/{thread_id}', )
+async def save_to_cloud(thread_id: str, req: Request, current_user : dict = Depends(get_current_user)):
     try:
         agent = req.app.state.agent
         config = {"configurable": {"thread_id": thread_id}}
-        await upload_completed_paper_to_storage(thread_id, agent, config)
+        await upload_completed_paper_to_storage(thread_id, agent, config, str(current_user["id"]))
         return {"status": "success"}
     except Exception as e:
         print(f"❌ Error saving paper to cloud: {e}")
         raise HTTPException(status_code=500, detail="Failed to save paper to cloud")
 
 @paper_router.delete('/cancel/{thread_id}')
-async def cancel_generation(thread_id: str, req: Request):
+async def cancel_generation(thread_id: str, req: Request, current_user : dict = Depends(get_current_user)):
     """Purges checkpoints, tracking states, active tasks, cloud storage files, and local caches for a thread."""
     try:
         # 1. Stop active background graph execution task if running
