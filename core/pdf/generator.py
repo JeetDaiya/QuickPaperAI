@@ -534,8 +534,8 @@ def generate_pdf(paper_string, answer_string, paper_output_path, answer_output_p
         paper_page.set_content(paper_string)
         answer_page.set_content(answer_string)
 
-        paper_page.wait_for_load_state("networkidle")
-        answer_page.wait_for_load_state("networkidle")
+        paper_page.wait_for_load_state("networkidle", timeout=90000)
+        answer_page.wait_for_load_state("networkidle", timeout=90000)
         
         paper_page.pdf(
             path=paper_output_path,
