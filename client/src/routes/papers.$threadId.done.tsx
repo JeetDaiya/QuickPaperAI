@@ -92,7 +92,7 @@ function DonePage() {
         <div className="mt-12 grid gap-10 lg:grid-cols-[3fr_2fr]">
           <FoldedPreview
             ready={ready}
-            url={files ? `${api.fileUrl(files.paper_pdf)}?preview=true` : null}
+            url={files ? api.fileUrl(`${files.paper_pdf}?preview=true`) : null}
           />
 
           <div>
