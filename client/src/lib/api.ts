@@ -18,7 +18,7 @@ async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json",
-    ...(init?.headers ?? {}),
+    ...(init?.headers as Record<string, string> ?? {}),
   };
 
   if (token) {
