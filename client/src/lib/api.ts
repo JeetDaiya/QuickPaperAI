@@ -7,11 +7,17 @@ import type {
 
 // QuickPaperAI client — calls the FastAPI backend directly from the browser.
 // Override the base via VITE_API_BASE_URL.
-export const API_BASE: string =
+let base =
   (typeof import.meta !== "undefined" &&
     (import.meta as ImportMeta & { env?: Record<string, string> }).env
       ?.VITE_API_BASE_URL) ||
   "http://localhost:8000";
+
+if (base && !base.startsWith("http://") && !base.startsWith("https://")) {
+  base = `https://${base}`;
+}
+
+export const API_BASE: string = base;
 
 async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
