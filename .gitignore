@@ -123,3 +123,7 @@ dist-ssr
 *.sln
 *.sw?
 authentication.md
+
+# Lovable & Vercel
+.lovable/
+.vercel/
