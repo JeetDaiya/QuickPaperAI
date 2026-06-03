@@ -1,0 +1,33 @@
+# Ignore git and ide files
+.git
+.github
+.vscode
+.agents
+
+# Ignore virtual environments
+venv
+.venv
+env
+
+# Ignore node modules and client assets
+client/node_modules
+client/dist
+client/build
+
+# Ignore output files
+outputs/
+core/paper.pdf
+core/answer.pdf
+core/paper.docx
+core/output.pdf
+
+# Ignore python caches and temp files
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.pytest_cache
+.ipynb_checkpoints
+
+# Ignore sensitive files (loaded via environment variables instead)
+.env

@@ -1,7 +1,6 @@
 from pydantic import BaseModel, Field, field_validator, model_validator
-from typing import Literal, Optional, Annotated
+from typing import Literal, Optional
 from enum import StrEnum
-import operator
 
 
 class QuestionTypes(StrEnum):

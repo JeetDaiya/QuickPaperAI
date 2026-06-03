@@ -14,6 +14,30 @@ import type {
   QuestionType,
 } from "@/lib/types";
 
+function getUnsavedStateKey(): string {
+  if (typeof window === "undefined") return "qpa.unsaved_new_paper_state";
+  const token = localStorage.getItem("token");
+  if (!token) return "qpa.unsaved_new_paper_state";
+  try {
+    const parts = token.split(".");
+    if (parts.length === 3) {
+      const base64Url = parts[1];
+      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+      const jsonPayload = decodeURIComponent(
+        window.atob(base64)
+          .split("")
+          .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+          .join("")
+      );
+      const payload = JSON.parse(jsonPayload);
+      if (payload.sub) {
+        return `qpa.unsaved_new_paper_state:${payload.sub}`;
+      }
+    }
+  } catch {}
+  return "qpa.unsaved_new_paper_state";
+}
+
 export const Route = createFileRoute("/new")({
   beforeLoad: ({ location }) => {
     if (typeof window !== "undefined") {
@@ -70,7 +94,7 @@ function NewPaper() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("qpa.unsaved_new_paper_state");
+      const saved = localStorage.getItem(getUnsavedStateKey());
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
@@ -102,9 +126,9 @@ function NewPaper() {
         subjectiveCount,
       };
       if (institutionName.trim() || chapters.length > 0) {
-        localStorage.setItem("qpa.unsaved_new_paper_state", JSON.stringify(stateObj));
+        localStorage.setItem(getUnsavedStateKey(), JSON.stringify(stateObj));
       } else {
-        localStorage.removeItem("qpa.unsaved_new_paper_state");
+        localStorage.removeItem(getUnsavedStateKey());
       }
     }
   }, [
@@ -141,7 +165,7 @@ function NewPaper() {
 
   const handleDiscard = () => {
     if (typeof window !== "undefined") {
-      localStorage.removeItem("qpa.unsaved_new_paper_state");
+      localStorage.removeItem(getUnsavedStateKey());
     }
     setUnsavedState(null);
     setIsRestoredOrStarted(true);
@@ -243,7 +267,7 @@ function NewPaper() {
     try {
       const { thread_id } = await api.generate(payload);
       if (typeof window !== "undefined") {
-        localStorage.removeItem("qpa.unsaved_new_paper_state");
+        localStorage.removeItem(getUnsavedStateKey());
       }
       upsertDraft({
         threadId: thread_id,

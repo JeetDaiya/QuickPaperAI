@@ -176,7 +176,7 @@ async def question_generator_node(state: ChapterState) -> dict:
     generator_chain = generator_prompt | generator_model
     
     for i, batch in enumerate(topic_batches):
-        previous_question = "\n".join([q.question_text for q in question_list]) if question_list else "None yet"
+        previous_question = "\n".join([q.question_text for q in question_list][-(subjective_count+objective_count):]) if question_list else "None yet"
         
         print(f"  Batch {i+1}/{len(topic_batches)}: {batch['topics']}")
         

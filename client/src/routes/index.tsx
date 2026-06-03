@@ -25,10 +25,16 @@ function Home() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    setDrafts(loadDrafts());
-    setActive(getActiveThread());
     if (typeof window !== "undefined") {
-      setIsLoggedIn(!!localStorage.getItem("token"));
+      const loggedIn = !!localStorage.getItem("token");
+      setIsLoggedIn(loggedIn);
+      if (loggedIn) {
+        setDrafts(loadDrafts());
+        setActive(getActiveThread());
+      } else {
+        setDrafts([]);
+        setActive(null);
+      }
     }
   }, []);
 
@@ -82,136 +88,146 @@ function Home() {
           ) : null}
         </div>
 
-        <section className="mt-20 grid gap-10 md:grid-cols-[2fr_3fr]">
-          <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-[var(--graphite)]">
-              Recent drafts
-            </p>
-            <h2 className="mt-2 font-serif text-3xl">From the pile</h2>
-            <p className="mt-3 text-sm text-[var(--graphite)]">
-              Pick up any draft you started. Sessions persist locally — no
-              account needed.
-            </p>
-          </div>
-
-          <ul className="space-y-3">
-            {drafts.length === 0 ? (
-              <li className="rounded-sm border border-dashed border-[var(--paper-rule)] bg-[var(--card)] px-5 py-6 text-sm text-[var(--graphite)]">
-                <span className="font-mono uppercase tracking-[0.18em] text-[10px] opacity-70">
-                  — empty desk —
-                </span>
-                <p className="mt-2">
-                  Your first generated paper will land here. Try starting one.
+        {isLoggedIn ? (
+          <>
+            <section className="mt-20 grid gap-10 md:grid-cols-[2fr_3fr]">
+              <div>
+                <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-[var(--graphite)]">
+                  Recent drafts
                 </p>
-              </li>
-            ) : (
-              drafts.map((d) => (
-                <li key={d.threadId}>
-                  <Link
-                    to="/papers/$threadId/progress"
-                    params={{ threadId: d.threadId }}
-                    className="group flex items-baseline justify-between gap-4 border-b border-[var(--paper-rule)] py-4 transition hover:bg-[var(--card)]"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate font-serif text-xl">
-                        {d.institution || "Untitled institution"}
-                      </div>
-                      <div className="mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--graphite)]">
-                        {d.subject} · {d.standard}
-                        {d.status ? (
-                          <span className="ml-2 text-[var(--vermillion)]">
-                            {d.status}
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className="shrink-0 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--graphite)] opacity-70 group-hover:opacity-100">
-                      {new Date(d.createdAt).toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                      })}
-                      <span className="ml-2 opacity-60 group-hover:translate-x-0.5 inline-block transition">
-                        →
-                      </span>
-                    </div>
-                  </Link>
-                </li>
-              ))
-            )}
-          </ul>
-        </section>
-
-        <section className="mt-20 grid gap-10 md:grid-cols-[2fr_3fr] border-t border-[var(--paper-rule)] pt-16">
-          <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-[var(--graphite)]">
-              Cloud vault
-            </p>
-            <h2 className="mt-2 font-serif text-3xl">Review history</h2>
-            <p className="mt-3 text-sm text-[var(--graphite)]">
-              Your generated exam papers stored securely in the cloud.
-            </p>
-          </div>
-
-          <div>
-            {!isLoggedIn ? (
-              <div className="rounded-sm border border-dashed border-[var(--paper-rule)] bg-[var(--card)] px-5 py-6 text-sm text-[var(--graphite)]">
-                <span className="font-mono uppercase tracking-[0.18em] text-[10px] opacity-70">
-                  🔐 Credentials required
-                </span>
-                <p className="mt-2">
-                  Please{" "}
-                  <Link to="/login" search={{ redirect: "/" }} className="text-[var(--vermillion)] hover:underline-hand pb-0.5">
-                    sign in
-                  </Link>{" "}
-                  to view your cloud-saved history.
+                <h2 className="mt-2 font-serif text-3xl">From the pile</h2>
+                <p className="mt-3 text-sm text-[var(--graphite)]">
+                  Pick up any draft you started. Sessions persist locally.
                 </p>
               </div>
-            ) : historyLoading ? (
-              <div className="rounded-sm border border-dashed border-[var(--paper-rule)] bg-[var(--card)] px-5 py-6 text-sm text-[var(--graphite)]">
-                <p className="animate-pulse">Loading cloud vault records…</p>
-              </div>
-            ) : !historyData?.history || historyData.history.length === 0 ? (
-              <div className="rounded-sm border border-dashed border-[var(--paper-rule)] bg-[var(--card)] px-5 py-6 text-sm text-[var(--graphite)]">
-                <span className="font-mono uppercase tracking-[0.18em] text-[10px] opacity-70">
-                  — vault empty —
-                </span>
-                <p className="mt-2">
-                  No cloud-saved papers found. Save your papers to the cloud from the final step!
-                </p>
-              </div>
-            ) : (
+
               <ul className="space-y-3">
-                {historyData.history.map((h) => (
-                  <li key={h.thread_id}>
-                    <Link
-                      to="/papers/$threadId/done"
-                      params={{ threadId: h.thread_id }}
-                      className="group flex items-baseline justify-between gap-4 border-b border-[var(--paper-rule)] py-4 transition hover:bg-[var(--card)]"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate font-serif text-xl">
-                          {h.institution_name || h.subject || "Untitled Paper"}
-                        </div>
-                        <div className="mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--graphite)]">
-                          {h.subject} · {h.standard}
-                        </div>
-                      </div>
-                      <div className="shrink-0 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--graphite)] opacity-70 group-hover:opacity-100">
-                        {new Date(h.created_at).toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                        })}
-                        <span className="ml-2 opacity-60 group-hover:translate-x-0.5 inline-block transition">
-                          →
-                        </span>
-                      </div>
-                    </Link>
+                {drafts.length === 0 ? (
+                  <li className="rounded-sm border border-dashed border-[var(--paper-rule)] bg-[var(--card)] px-5 py-6 text-sm text-[var(--graphite)]">
+                    <span className="font-mono uppercase tracking-[0.18em] text-[10px] opacity-70">
+                      — empty desk —
+                    </span>
+                    <p className="mt-2">
+                      Your first generated paper will land here. Try starting one.
+                    </p>
                   </li>
-                ))}
+                ) : (
+                  drafts.map((d) => (
+                    <li key={d.threadId}>
+                      <Link
+                        to="/papers/$threadId/progress"
+                        params={{ threadId: d.threadId }}
+                        className="group flex items-baseline justify-between gap-4 border-b border-[var(--paper-rule)] py-4 transition hover:bg-[var(--card)]"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate font-serif text-xl">
+                            {d.institution || "Untitled institution"}
+                          </div>
+                          <div className="mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--graphite)]">
+                            {d.subject} · {d.standard}
+                            {d.status ? (
+                              <span className="ml-2 text-[var(--vermillion)]">
+                                {d.status}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="shrink-0 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--graphite)] opacity-70 group-hover:opacity-100">
+                          {new Date(d.createdAt).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                          })}
+                          <span className="ml-2 opacity-60 group-hover:translate-x-0.5 inline-block transition">
+                            →
+                          </span>
+                        </div>
+                      </Link>
+                    </li>
+                  ))
+                )}
               </ul>
-            )}
-          </div>
-        </section>
+            </section>
+
+            <section className="mt-20 grid gap-10 md:grid-cols-[2fr_3fr] border-t border-[var(--paper-rule)] pt-16">
+              <div>
+                <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-[var(--graphite)]">
+                  Cloud vault
+                </p>
+                <h2 className="mt-2 font-serif text-3xl">Review history</h2>
+                <p className="mt-3 text-sm text-[var(--graphite)]">
+                  Your generated exam papers stored securely in the cloud.
+                </p>
+              </div>
+
+              <div>
+                {historyLoading ? (
+                  <div className="rounded-sm border border-dashed border-[var(--paper-rule)] bg-[var(--card)] px-5 py-6 text-sm text-[var(--graphite)]">
+                    <p className="animate-pulse">Loading cloud vault records…</p>
+                  </div>
+                ) : !historyData?.history || historyData.history.length === 0 ? (
+                  <div className="rounded-sm border border-dashed border-[var(--paper-rule)] bg-[var(--card)] px-5 py-6 text-sm text-[var(--graphite)]">
+                    <span className="font-mono uppercase tracking-[0.18em] text-[10px] opacity-70">
+                      — vault empty —
+                    </span>
+                    <p className="mt-2">
+                      No cloud-saved papers found. Save your papers to the cloud from the final step!
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="space-y-3">
+                    {historyData.history.map((h) => (
+                      <li key={h.thread_id}>
+                        <Link
+                          to="/papers/$threadId/done"
+                          params={{ threadId: h.thread_id }}
+                          className="group flex items-baseline justify-between gap-4 border-b border-[var(--paper-rule)] py-4 transition hover:bg-[var(--card)]"
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate font-serif text-xl">
+                              {h.institution_name || h.subject || "Untitled Paper"}
+                            </div>
+                            <div className="mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--graphite)]">
+                              {h.subject} · {h.standard}
+                            </div>
+                          </div>
+                          <div className="shrink-0 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--graphite)] opacity-70 group-hover:opacity-100">
+                            {new Date(h.created_at).toLocaleDateString(undefined, {
+                              month: "short",
+                              day: "numeric",
+                            })}
+                            <span className="ml-2 opacity-60 group-hover:translate-x-0.5 inline-block transition">
+                              →
+                            </span>
+                          </div>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </section>
+          </>
+        ) : (
+          <section className="mt-20 border border-dashed border-[var(--paper-rule)] bg-[var(--card)] p-8 text-center max-w-xl stamp-shadow">
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--graphite)] mb-3">
+              🔐 Authentication required
+            </p>
+            <h2 className="font-serif text-2xl mb-3">Access your Examiner's Desk</h2>
+            <p className="text-sm text-[var(--graphite)] mb-6 max-w-md mx-auto">
+              Sign in to view your recent drafts, review history, and begin generating new exam papers.
+            </p>
+            <Link
+              to="/login"
+              search={{ redirect: "/" }}
+              className="group inline-flex items-center gap-3 rounded-sm bg-[var(--ink)] px-6 py-3 font-mono text-xs uppercase tracking-[0.22em] text-[var(--ink-foreground)] transition hover:bg-[var(--vermillion)] cursor-pointer"
+            >
+              Sign in to start
+              <span aria-hidden className="opacity-60 group-hover:translate-x-1 transition">
+                →
+              </span>
+            </Link>
+          </section>
+        )}
       </main>
     </div>
   );
