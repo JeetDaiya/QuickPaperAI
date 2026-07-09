@@ -35,7 +35,7 @@ class PaperRepository(ABC):
 
     @abstractmethod
     def get_paper_metadata(self, thread_id: str, paper_name: str):
-
+        pass
 
     @abstractmethod
     def get_chapters(self):
