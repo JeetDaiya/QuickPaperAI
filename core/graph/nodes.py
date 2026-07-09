@@ -1,8 +1,9 @@
+from langchain_core.runnables import RunnableConfig
+
 from core.graph.state import PaperState, ChapterState
 from core.config.prompts import QUESTION_GENERATOR_SCIENCE_SYSTEM_PROMPT, QUESTION_GENERATOR_SYSTEM_SS_PROMPT
 from core.config.settings import generator_model
 from core.models.schemas import BatchOutput, Question
-from core.db.db import get_chapter_chunks
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.types import Send, interrupt
 from core.pdf.generator import generate_paper_html, generate_answer_html, generate_pdf, generate_docx
@@ -80,7 +81,7 @@ def clean_latex(text: str) -> str:
     return text.replace('\r', '\\r').replace('\t', '\\t')
 
 
-async def question_generator_node(state: ChapterState) -> dict:
+async def question_generator_node(state: ChapterState, config : RunnableConfig) -> dict:
     """
     Fetches chapter chunks, groups by sub-topic, and generates questions per topic group.
     """
@@ -96,8 +97,9 @@ async def question_generator_node(state: ChapterState) -> dict:
     
     allowed_objective_types = [t for t in allowed_types if t.is_objective]
     allowed_subjective_types = [t for t in allowed_types if t.is_subjective]
-    
-    chapter_chunks = get_chapter_chunks(subject=subject, chapter=chapter)
+
+    chunk_repo = config["configurable"]["chunk_repo"]
+    chapter_chunks = chunk_repo.get_chapter_chunks(subject=subject, chapter=chapter)
     topic_batches = group_by_subtopic(chapter_chunks)
     
     print(f"[{chapter}] {len(chapter_chunks)} chunks → {len(topic_batches)} topic batches")

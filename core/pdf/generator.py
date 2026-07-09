@@ -1,8 +1,6 @@
 from core.models.schemas import Question, PaperRequest, QuestionTypes
 from datetime import date
 from collections import OrderedDict
-import asyncio
-import pathlib
 from playwright.sync_api import sync_playwright
 
 # Display order and headings for each question type

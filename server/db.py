@@ -15,7 +15,12 @@ def create_user(email: str, hashed_password: str, name: str):
     user_data = {
         "email": email,
         "hashed_password": hashed_password,
-        "name": name
+        "name": name,
+        "is_active" : False
     }
     response = db.table("users").insert(user_data).execute()
+    return response.data[0] if response.data else None
+
+def update_user_password(email: str, new_hashed_password: str):
+    response = db.table("user").update({"hashed_password" : new_hashed_password}).eq("email" , email).execute()
     return response.data[0] if response.data else None

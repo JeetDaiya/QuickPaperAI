@@ -22,4 +22,9 @@ class UserResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+class OTPVerification(BaseModel):
+    email: EmailStr
+    otp: str
+
     
