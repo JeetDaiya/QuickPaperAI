@@ -1,14 +1,16 @@
 from langchain_core.runnables import RunnableConfig
 
+from core.graph.config import GraphConfig
 from core.graph.state import PaperState, ChapterState
 from core.config.prompts import QUESTION_GENERATOR_SCIENCE_SYSTEM_PROMPT, QUESTION_GENERATOR_SYSTEM_SS_PROMPT
 from core.config.settings import generator_model
+from core.interfaces.document_compiler import DocumentCompiler
+from core.interfaces.paper_formatter import PaperFormatter
 from core.models.schemas import BatchOutput, Question
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.types import Send, interrupt
-from core.pdf.generator import generate_paper_html, generate_answer_html, generate_pdf, generate_docx
 from core.config.rate_limiter import TokenBucket
-from core.graph.tracker import update_chapter_progress, get_chapter_progress
+from core.graph.tracker import update_chapter_progress
 import os
 
 generator_model = generator_model.with_structured_output(schema=BatchOutput)
@@ -16,7 +18,7 @@ rate_limiter = TokenBucket(max_capacity=5, refil_rate=0.0833)
 
 
 def format_batch(chunks: list[dict]) -> str:
-    "Takes the chunks and formats them for input"
+    """Takes the chunks and formats them for input"""
     sections = []
     for i, chunk in enumerate(chunks, 1):
         sections.append(f"--- Chunk {i} ---\n{chunk['content']}")
@@ -277,24 +279,35 @@ def review_node(state: PaperState):
     
     
 
-def pdf_node(state: PaperState):
+def pdf_node(state: PaperState, config : RunnableConfig):
     """Generates the pdf from list of selected questions"""
     selected_questions = state["selected_questions"]
     
     thread_id = state["thread_id"]
     output_dir = f"outputs/{thread_id}"
     os.makedirs(output_dir, exist_ok=True)
-    
-    paper_html = generate_paper_html(paper_request=state["paper_request"], selected_questions=selected_questions)
-    answer_html = generate_answer_html(paper_request=state["paper_request"], selected_questions=selected_questions)
 
+    configurable : GraphConfig = config.get("configurable", {})
+
+    paper_request = state["paper_request"]
+
+
+    document_compiler : DocumentCompiler = configurable.get("document_compiler")
+    html_paper_formatter : PaperFormatter = configurable.get("html_paper_formatter")
+    markdown_paper_formatter  : PaperFormatter = configurable.get("markdown_paper_formatter")
+
+
+    paper_html = html_paper_formatter.render_paper(paper_request=paper_request, questions=selected_questions)
+    answer_html = html_paper_formatter.render_paper(paper_request=paper_request, questions=selected_questions)
+
+    paper_md = markdown_paper_formatter.render_paper(paper_request=paper_request, questions=selected_questions)
     # 1. Compile PDFs (Critical)
     try:
-        generate_pdf(
-            paper_string=paper_html, 
-            answer_string=answer_html, 
-            answer_output_path=f'{output_dir}/answer.pdf', 
-            paper_output_path=f'{output_dir}/paper.pdf'
+        document_compiler.generate_pdf(
+            paper_html=paper_html,
+            answer_html=answer_html,
+            paper_output_path=f'{output_dir}/paper.pdf',
+            answer_output_path=f'{output_dir}/answer.pdf'
         )
     except Exception as e:
         print(f"❌ Critical Failure: Failed to generate PDF documents: {e}")
@@ -302,10 +315,9 @@ def pdf_node(state: PaperState):
         
     # 2. Compile DOCX (Soft Isolation - non-critical)
     try:
-        generate_docx(
-            selected_questions=selected_questions, 
-            paper_request=state["paper_request"], 
-            output_path=f'{output_dir}/paper.docx'
+        document_compiler.generate_docx(
+            markdown=paper_md,
+            output_path=f'{output_dir}/paper.docx',
         )
     except Exception as e:
         print(f"⚠️ Soft Failure: Failed to generate DOCX document (continuing gracefully): {e}")

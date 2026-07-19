@@ -29,3 +29,4 @@ llama_cloud==2.8.0
 typing-extensions==4.14.1
 
 fastapi-mail==1.6.4
+upstash-redis
