@@ -1,4 +1,6 @@
 from langgraph.graph import StateGraph, START, END
+
+from core.graph.config import GraphConfig
 from core.graph.state import PaperState
 from core.graph.nodes import question_generator_node, router_node, review_node, pdf_node
 
@@ -7,7 +9,7 @@ from core.graph.nodes import question_generator_node, router_node, review_node, 
 
 from langgraph.types import RetryPolicy
 
-graph = StateGraph(state_schema=PaperState)
+graph = StateGraph(state_schema=PaperState, context_schema=GraphConfig)
 graph.add_node("distribute", lambda state: {})  # pass-through to initialize state
 graph.add_node(
     "question_generator_node",

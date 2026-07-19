@@ -1,7 +1,10 @@
 from fastapi import Depends, Request, APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
+from core.graph.config import GraphConfig
 from core.interfaces.db import ChunkRepository, PaperRepository
+from core.interfaces.document_compiler import DocumentCompiler
+from core.interfaces.paper_formatter import PaperFormatter
 from core.interfaces.storage import StorageService
 from core.models.schemas import PaperRequest
 from core.graph.runner import run_graph
@@ -14,7 +17,7 @@ from pydantic import BaseModel
 from langgraph.types import Command
 from langgraph.graph.state import CompiledStateGraph
 from server.dependencies import get_current_user, get_chunk_repository, get_paper_repository, get_cloud_storage, \
-    get_local_storage
+    get_local_storage, get_html_formatter, get_markdown_formatter, get_document_compiler
 
 paper_router = APIRouter(prefix='/api')
 
@@ -25,7 +28,7 @@ class ResumeRequest(BaseModel):
     selected_indices: list[int]
 
 
-async def graph_runner(agent, thread_id: str, request: PaperRequest, chunk_repo: ChunkRepository):
+async def graph_runner(agent, thread_id: str, request: PaperRequest, chunk_repo: ChunkRepository, html_paper_formatter : PaperFormatter, markdown_paper_formatter : PaperFormatter, document_compiler : DocumentCompiler):
     """Function which runs the graph in background"""
     initial_state : PaperState = {
         "all_questions" : [],
@@ -34,9 +37,12 @@ async def graph_runner(agent, thread_id: str, request: PaperRequest, chunk_repo:
         "thread_id" : thread_id
     }
 
-    dependencies = {
-        "chunk_repo" : chunk_repo
-    }
+    dependencies = GraphConfig(
+        chunk_repo=chunk_repo,
+        html_paper_formatter=html_paper_formatter,
+        markdown_paper_formatter=markdown_paper_formatter,
+        document_compiler=document_compiler
+    )
     
     try:
         await run_graph(agent, initial_state, dependencies=dependencies)
@@ -148,7 +154,7 @@ async def upload_completed_paper_to_storage(thread_id : str,
     
     
 @paper_router.post('/generate')
-async def generate_paper(req : Request, paper_request : PaperRequest, current_user : dict = Depends(get_current_user), chunk_repo: ChunkRepository = Depends(get_chunk_repository)):
+async def generate_paper(req : Request, paper_request : PaperRequest, current_user : dict = Depends(get_current_user), chunk_repo: ChunkRepository = Depends(get_chunk_repository), html_paper_formatter : PaperFormatter = Depends(get_html_formatter), markdown_paper_formatter : PaperFormatter = Depends(get_markdown_formatter), document_compiler : DocumentCompiler = Depends(get_document_compiler)):
     thread_id = str(uuid.uuid4())
 
     # 1. Initialize pending status for all chapters
@@ -162,7 +168,7 @@ async def generate_paper(req : Request, paper_request : PaperRequest, current_us
 
     # 2. Schedule cancelable background task in the event loop
     agent = req.app.state.agent
-    task = asyncio.create_task(graph_runner(agent, thread_id, paper_request, chunk_repo=chunk_repo))
+    task = asyncio.create_task(graph_runner(agent=agent, thread_id=thread_id, request=paper_request, chunk_repo=chunk_repo, html_paper_formatter=html_paper_formatter, markdown_paper_formatter=markdown_paper_formatter, document_compiler=document_compiler))
     RUNNING_TASKS[thread_id] = task
     task.add_done_callback(lambda t: RUNNING_TASKS.pop(thread_id, None))
     
