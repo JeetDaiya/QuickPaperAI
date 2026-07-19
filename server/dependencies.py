@@ -16,6 +16,7 @@ from core.adapters.supabase_storage import SupabaseStorageService
 from core.graph.builder import graph
 import os
 
+from core.graph.tracker import ProgressTracker
 from core.interfaces.auth import AuthService
 from core.interfaces.db import ChunkRepository, UserRepository, PaperRepository
 from fastapi.security import OAuth2PasswordBearer
@@ -38,8 +39,6 @@ from upstash_redis.asyncio import Redis
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='auth/login', auto_error=False)
-
-
 
 supabase_client : Client = create_client(supabase_key=SUPABASE_SERVICE_ROLE_KEY, supabase_url=SUPABASE_URL)
 otp_store : Optional[OTPStore] = None
@@ -68,6 +67,11 @@ def get_otp_store() -> OTPStore:
 def get_authentication_service(user_repo : UserRepository = Depends(get_user_repository)) -> AuthService:
     return CustomAuthService(algorithm=ALGORITHM, secret_key=SECRET_KEY, user_repo=user_repo, token_expire_minutes=10080)
 
+
+@lru_cache
+def get_progress_tracker() -> ProgressTracker:
+    redis_client = Redis(url=os.getenv("UPSTASH_REDIS_REST_URL"), token=os.getenv("UPSTASH_REDIS_REST_TOKEN"))
+    return ProgressTracker(redis_client=redis_client, ttl_seconds=86400)
 
 compiled_agent = None
 @asynccontextmanager
