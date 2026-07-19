@@ -1,6 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 from pydantic import BaseModel, EmailStr, ConfigDict
+from enum import Enum
 
 
 class UserRegister(BaseModel):
@@ -26,5 +27,28 @@ class UserResponse(BaseModel):
 class OTPVerification(BaseModel):
     email: EmailStr
     otp: str
+
+
+class OTPPurpose(str, Enum):
+    SIGNUP = "signup"
+    RESET_PASSWORD = "reset_password"
+
+
+class EmailRequest(BaseModel):
+    email: EmailStr
+    purpose: OTPPurpose
+
+
+class OTPVerification(BaseModel):
+    email: EmailStr
+    otp: str
+    purpose: OTPPurpose
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    token: str
+    new_password: str
+
 
     

@@ -20,6 +20,11 @@ class UserRepository(ABC):
     def update_user_password(self, email: EmailStr, new_hashed_password: str):
         pass
 
+    @abstractmethod
+    def activate_user(self, email: EmailStr):
+        pass
+
+
 class PaperRepository(ABC):
     @abstractmethod
     def get_user_paper_history(self, user_id: str):

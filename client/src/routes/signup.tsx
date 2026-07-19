@@ -62,12 +62,16 @@ function SignupPage() {
     setSubmitting(true);
     try {
       await api.register({ email, password, name });
+      await api.sendOtp({ email, purpose: "signup" });
       setSuccess(true);
-      
-      // Delay navigation to let the user see the success feedback
+
+      // Delay navigation slightly to let the user see success feedback
       setTimeout(() => {
-        navigate({ to: "/login" });
-      }, 1500);
+        navigate({
+          to: "/verify-otp",
+          search: { email },
+        });
+      }, 1000);
     } catch (err: any) {
       setError(err.message || "An unexpected error occurred during registration.");
     } finally {
@@ -107,7 +111,7 @@ function SignupPage() {
 
             {success && (
               <div className="mb-6 border border-emerald-600 bg-emerald-50 px-4 py-3 font-mono text-xs text-emerald-800">
-                <span className="font-bold mr-1">✓ Registered:</span> Account created successfully! Redirecting to login...
+                <span className="font-bold mr-1">✓ Registered:</span> Account created! Verification code sent to your email. Redirecting...
               </div>
             )}
 

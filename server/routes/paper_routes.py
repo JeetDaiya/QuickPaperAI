@@ -7,14 +7,12 @@ from core.models.schemas import PaperRequest
 from core.graph.runner import run_graph
 import uuid
 import os
-import shutil
 import asyncio
 from core.graph.state import PaperState
 from core.graph.tracker import update_chapter_progress, get_chapter_progress, PROGRESS_TRACKER
 from pydantic import BaseModel
 from langgraph.types import Command
 from langgraph.graph.state import CompiledStateGraph
-from server.db import db
 from server.dependencies import get_current_user, get_chunk_repository, get_paper_repository, get_cloud_storage, \
     get_local_storage
 
@@ -104,7 +102,7 @@ async def upload_completed_paper_to_storage(thread_id : str,
                 ".pdf") else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             try:
                 cloud_storage.put_file(
-                    path=storage_path,
+                    file_path=storage_path,
                     file_data=files_data[filename],
                     content_type=content_type
                 )
@@ -138,7 +136,7 @@ async def upload_completed_paper_to_storage(thread_id : str,
                 for filename in filenames:
                     cloud_storage.delete_file(file_path=f"{thread_id}/{filename}")
             except Exception as e:
-                pass
+                raise e
             return {"status" : "failed"}
 
         return {"status" : "success"}
@@ -327,7 +325,7 @@ async def download_file(thread_id: str, filename: str, preview: bool = False, cu
 
         file_bytes = cloud_storage.get_file(file_path)
 
-        local_storage.put_file(file_data=file_bytes, path=f"{thread_id}/{filename}")
+        local_storage.put_file(file_data=file_bytes, file_path=f"{thread_id}/{filename}")
 
         print(f"✅ Recovered and hot-cached {filename} successfully from Supabase Storage.")
         return FileResponse(local_path, media_type=response_media_type, filename=response_filename)

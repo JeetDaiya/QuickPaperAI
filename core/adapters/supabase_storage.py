@@ -19,10 +19,10 @@ class SupabaseStorageService(StorageService):
             raise  e
 
 
-    def put_file(self, file_data: bytes, path: str, content_type: Optional[str] = None):
+    def put_file(self, file_data: bytes, file_path: str, content_type: Optional[str] = None):
         try:
             self.db.storage.from_(self.bucket_name).upload(
-                path=path,
+                path=file_path,
                 file=file_data,
                 file_options={"content-type" : content_type, "x-upsert" : "true"},
             )
@@ -36,16 +36,16 @@ class SupabaseStorageService(StorageService):
         except Exception as e:
             raise e
 
-    def delete_file(self,  path : str):
+    def delete_file(self,  file_path : str):
         try:
-            self.db.storage.from_(self.bucket_name).remove([path])
+            self.db.storage.from_(self.bucket_name).remove([file_path])
         except Exception as e:
             raise e
 
-    def exists(self, path: str) -> bool:
+    def exists(self, file_path: str) -> bool:
         try:
-            folder = os.path.dirname(path)
-            filename = os.path.basename(path)
+            folder = os.path.dirname(file_path)
+            filename = os.path.basename(file_path)
 
             # List files in the folder and see if filename matches
             files = self.db.storage.from_(self.bucket_name).list(folder)
