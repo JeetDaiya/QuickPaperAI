@@ -10,13 +10,12 @@ class SupabaseStorageService(StorageService):
     def __init__(self, supabase_client : Client, bucket_name : str):
         self.db = supabase_client
         self.bucket_name = bucket_name
-        return
 
     def _get_bucket(self, bucket_name : str):
         try:
             self.db.storage.get_bucket(bucket_name)
         except Exception as e:
-            raise  e
+            raise e
 
 
     def put_file(self, file_data: bytes, file_path: str, content_type: Optional[str] = None):
@@ -36,7 +35,7 @@ class SupabaseStorageService(StorageService):
         except Exception as e:
             raise e
 
-    def delete_file(self,  file_path : str):
+    def delete_file(self, file_path : str):
         try:
             self.db.storage.from_(self.bucket_name).remove([file_path])
         except Exception as e:

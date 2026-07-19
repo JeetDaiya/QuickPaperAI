@@ -7,9 +7,8 @@ from core.interfaces.storage import StorageService
 class LocalStorageService(StorageService):
     def __init__(self, root_dir: str):
         self.root_dir = root_dir
-        pass
 
-    def put_file(self,file_data: bytes, file_path: str, content_type: Optional[str] = None):
+    def put_file(self, file_data: bytes, file_path: str, content_type: Optional[str] = None):
         try:
             full_path = os.path.join(self.root_dir, file_path)
 
@@ -33,7 +32,7 @@ class LocalStorageService(StorageService):
         except Exception as e:
             raise e
 
-    def delete_file(self,  file_path : str):
+    def delete_file(self, file_path : str):
         try:
             full_path = os.path.join(self.root_dir, file_path)
 

@@ -1,6 +1,8 @@
 from typing import Optional
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from core.models.schemas import PaperRequest, Question, EvaluationPoint
 from psycopg_pool import AsyncConnectionPool
 from psycopg.rows import dict_row
 from contextlib import asynccontextmanager
@@ -84,7 +86,13 @@ async def lifespan(app : FastAPI):
 
     await pool.open()
     
-    checkpointer = AsyncPostgresSaver(pool)
+    allowed_types = [
+        ("core.models.schemas", "PaperRequest"),
+        ("core.models.schemas", "Question"),
+        ("core.models.schemas", "EvaluationPoint"),
+    ]
+    serde = JsonPlusSerializer(allowed_msgpack_modules=allowed_types)
+    checkpointer = AsyncPostgresSaver(pool, serde=serde)
     
     await checkpointer.setup()
     
