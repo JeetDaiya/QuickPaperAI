@@ -9,6 +9,7 @@ load_dotenv()
 
 MAIN_AI_MODEL = "gemini-3.5-flash"
 SUPABASE_KEY=os.getenv("SUPABASE_KEY")
+SUPABASE_SERVICE_ROLE_KEY=os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 SUPABASE_URL=os.getenv("SUPABASE_URL")
 
 

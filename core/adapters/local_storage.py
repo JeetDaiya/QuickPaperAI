@@ -7,11 +7,10 @@ from core.interfaces.storage import StorageService
 class LocalStorageService(StorageService):
     def __init__(self, root_dir: str):
         self.root_dir = root_dir
-        pass
 
-    def put_file(self,file_data: bytes, path: str, content_type: Optional[str] = None):
+    def put_file(self, file_data: bytes, file_path: str, content_type: Optional[str] = None):
         try:
-            full_path = os.path.join(self.root_dir, path)
+            full_path = os.path.join(self.root_dir, file_path)
 
             os.makedirs(os.path.dirname(full_path), exist_ok=True)
 
@@ -20,9 +19,9 @@ class LocalStorageService(StorageService):
         except Exception as e:
             raise e
 
-    def get_file(self, path: str, content_type: Optional[str] = None):
+    def get_file(self, file_path: str, content_type: Optional[str] = None):
         try:
-            full_path = os.path.join(self.root_dir, path)
+            full_path = os.path.join(self.root_dir, file_path)
 
             if not os.path.exists(full_path):
                 raise FileNotFoundError(f"Local file not found")
@@ -33,7 +32,7 @@ class LocalStorageService(StorageService):
         except Exception as e:
             raise e
 
-    def delete_file(self,  file_path : str):
+    def delete_file(self, file_path : str):
         try:
             full_path = os.path.join(self.root_dir, file_path)
 

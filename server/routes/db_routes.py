@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from core.interfaces.db import PaperRepository
-from server.db import db
-import os
+
 
 from server.dependencies import get_current_user, get_paper_repository
 

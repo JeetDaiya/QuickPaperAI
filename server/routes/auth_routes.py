@@ -1,53 +1,21 @@
 import secrets
 
-from pydantic import BaseModel, EmailStr
 
-from core.interfaces.db import UserRepository
+from core.interfaces.auth import AuthService
 from core.interfaces.mail import EmailService
-from server.dependencies import get_user_repository, get_email_service
-from server.schemas.user_schemas import UserLogin, UserRegister, UserResponse
+from core.interfaces.otp_store import OTPStore
+from server.dependencies import get_email_service, get_otp_store, get_authentication_service
+from server.schemas.user_schemas import UserRegister, UserResponse, EmailRequest, OTPVerification, OTPPurpose, ResetPasswordRequest
 from server.schemas.token_schemas import Token
-from fastapi import APIRouter, HTTPException, status, Depends
-from server.core.security import create_access_token, get_password_hash, verify_password
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import OAuth2PasswordRequestForm
-from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
-from datetime import datetime
-import os
 
 auth_routes = APIRouter(prefix='/auth')
-
-email_conf = ConnectionConfig(
-    MAIL_FROM=os.getenv("MAIL_FROM"),
-    MAIL_USERNAME=os.getenv("MAIL_USERNAME"),
-    MAIL_PASSWORD=os.getenv("MAIL_PASSWORD"),
-    MAIL_PORT=587,
-    MAIL_SERVER="smtp-relay.brevo.com",
-    MAIL_STARTTLS=True,
-    MAIL_SSL_TLS=False,
-    USE_CREDENTIALS=True,
-    VALIDATE_CERTS=True
-)
-class EmailRequest(BaseModel):
-    email: EmailStr
-    
-class OTPVerification(BaseModel):
-    email: EmailStr
-    otp: str
-
-mailer = FastMail(config=email_conf)
-
-
-otp_storage = {}
-
 
 def generate_otp(length: int = 6):
     return "".join(str(secrets.randbelow(10)) for _ in range(length))
 
-async def send_email(email : str, email_service : EmailService):
-    
-    otp_code = generate_otp()
-    otp_storage[email] = otp_code
-    
+async def send_email(email : str, otp_code: str, email_service : EmailService):
     
     html_content = f"""
         <!DOCTYPE html>
@@ -145,88 +113,136 @@ async def send_email(email : str, email_service : EmailService):
     """
     
 
-    message = MessageSchema(
-        subject="Your Account Verification OTP",
-        recipients=[email],
-        body=html_content,
-        subtype=MessageType.html
-    )
-
     await email_service.send_email(subject="Your Account Verification OTP", recipient=email, body=html_content)
     
 
-
-
-
 @auth_routes.post('/register', response_model=UserResponse)
-def register_user(user: UserRegister, user_repo : UserRepository = Depends(get_user_repository)):
+async def register_user(user: UserRegister, auth_service: AuthService = Depends(get_authentication_service)):
     user_email = user.email
-    db_user = user_repo.get_user(email=user_email)
-    
-    if db_user is not None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
-    
-    else:
-        password = user.password
-        hashed_password = get_password_hash(plain_password=password)
-        user_name = user.name
-        new_user = user_repo.create_user(email=user_email, hashed_password=hashed_password, name=user_name)
-        return new_user
+    user_name = user.name
+    password = user.password
+
+    new_user = await auth_service.register_user(email=user_email, password=password, name=user_name)
+
+    return new_user
 
 @auth_routes.post('/login', response_model=Token)
-def login_user(form_data: OAuth2PasswordRequestForm = Depends(), user_repo: UserRepository = Depends(get_user_repository)):
-    user = user_repo.get_user(email=form_data.username)
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")    
+async def login_user(form_data: OAuth2PasswordRequestForm = Depends(), auth_service : AuthService = Depends(get_authentication_service)):
+    email = form_data.username
 
     password = form_data.password
-    if not verify_password(plain_password=password, hashed_password=user["hashed_password"]):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
 
-    access_token = create_access_token(data={"sub": user["email"]})
-    return {
-        "access_token": access_token,
-        "token_type": "bearer"
-    }
+    token = await auth_service.authenticate_user(email=email, password=password)
+
+    return token
     
 @auth_routes.post("/send-email")
-async def send_verification_email(email_req: EmailRequest, email_service : EmailService = Depends(get_email_service)):
-    email = email_req.email
-    
+async def send_verification_email(email_req: EmailRequest, email_service : EmailService = Depends(get_email_service), otp_store : OTPStore = Depends(get_otp_store), auth_service: AuthService = Depends(get_authentication_service)):
+    email = email_req.email.lower().strip()
+    purpose = email_req.purpose
+
+    user = await auth_service.get_user(email=email)
+
+    if purpose == OTPPurpose.SIGNUP:
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found, please register first")
+
+        if user.get("is_active", False):
+            raise HTTPException(status_code=400, detail="User already verified, please log in again")
+
+    elif purpose == OTPPurpose.RESET_PASSWORD:
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found, please register first")
+        if user and not user.get("is_active", False):
+            raise HTTPException(status_code=400, detail="User is not verified, please verify your account first")
+
+    if await otp_store.set_send_cooldown(email=email):
+        raise HTTPException(
+            status_code=429,
+            detail="Please wait 60 seconds before request another code"
+        )
+
     try:
-        await send_email(email=email, email_service=email_service)
+        otp_code = generate_otp()
+        await otp_store.save_otp(email=email, otp_code=otp_code)
+        await send_email(email=email, otp_code=otp_code, email_service=email_service)
         return {"message": "OTP sent successfully. Please check your email."}
     except Exception as e:
+        await otp_store.delete_otp(email=email)
         raise HTTPException(status_code=500, detail="Failed to send email.")
 
 
 @auth_routes.post("/verify-otp")
-async def verify_otp(data: OTPVerification):
+async def verify_otp(
+    data: OTPVerification, 
+    otp_store : OTPStore = Depends(get_otp_store),
+    auth_service: AuthService = Depends(get_authentication_service)
+):
     # 1. Check if OTP was generated for this email
-    record = otp_storage.get(data.email)
+    email = data.email.lower().strip()
+    purpose = data.purpose
+
+    if await otp_store.is_locked_out(email=email):
+            raise HTTPException(
+                status_code=403,
+                detail="Too many failed verification, Please try again after 15 minutes."
+            )
+
+    stored_otp = await otp_store.get_otp(email=email)
     
-    if not record:
-        raise HTTPException(status_code=400, detail="OTP not found or expired.")
+    if not stored_otp:
+        raise HTTPException(status_code=400, detail="OTP not found or expired. Please request a new code.")
         
     # 2. Check expiration
-    if datetime.utcnow() > record["expires_at"]:
-        del otp_storage[data.email] # Clean up
-        raise HTTPException(status_code=400, detail="OTP has expired.")
         
     # 3. Validate OTP match
-    if record["otp"] != data.otp:
-        raise HTTPException(status_code=400, detail="Invalid OTP.")
-        
+    if stored_otp != data.otp:
+        is_now_locked = await otp_store.increment_failed_attempts(email=email)
+        if is_now_locked:
+            raise HTTPException(
+                status_code=403,
+                detail="Too many verification attempts. Your verification code is locked for 15 minutes."
+            )
+        else:
+            raise HTTPException(status_code=400, detail="Invalid OTP.")
+
     # 4. Success! Clear the OTP from storage
-    del otp_storage[data.email]
+    await otp_store.delete_otp(email=email)
+
+    if purpose == OTPPurpose.SIGNUP:
+        await auth_service.activate_user(email=email)
+        token_data = auth_service.create_token_for_email(email=email)
+        return {
+            "message": "Email verified successfully!",
+            "access_token": token_data["access_token"],
+            "token_type": token_data["token_type"]
+        }
+    elif purpose == OTPPurpose.RESET_PASSWORD:
+        reset_token = auth_service.create_token_for_email(email=email)
+        return {
+            "message": "OTP verified successfully. You can now reset your password.",
+            "reset_token": reset_token["access_token"],
+        }
+    else:
+        raise HTTPException(status_code=400, detail="Invalid purpose.")
+
+
+@auth_routes.post("/reset-password")
+async def reset_password(
+    data: ResetPasswordRequest,
+    auth_service: AuthService = Depends(get_authentication_service)
+):
+    # 1. Verify reset token
+    try:
+        user = await auth_service.verify_session(data.token)
+    except HTTPException as e:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
     
-    # --- Integration with your existing Auth ---
-    # Here is where you would:
-    # 1. Save the user to your database as "is_active=True"
-    # 2. Generate your JWT token
-    # jwt_token = create_access_token(data={"sub": data.email})
-    
-    return {
-        "message": "Email verified successfully!",
-        "token": "your_generated_jwt_token_here" 
-    }
+    # 2. Check email match
+    if user.get("email").lower().strip() != data.email.lower().strip():
+        raise HTTPException(status_code=400, detail="Invalid reset request parameters.")
+
+    # 3. Perform password reset
+    await auth_service.update_password(email=data.email.lower().strip(), new_password=data.new_password)
+    return {"message": "Password reset successfully."}
+

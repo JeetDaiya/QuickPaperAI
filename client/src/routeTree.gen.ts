@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as VerifyOtpRouteImport } from './routes/verify-otp'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as LoginRouteImport } from './routes/login'
@@ -17,6 +18,11 @@ import { Route as PapersThreadIdReviewRouteImport } from './routes/papers.$threa
 import { Route as PapersThreadIdProgressRouteImport } from './routes/papers.$threadId.progress'
 import { Route as PapersThreadIdDoneRouteImport } from './routes/papers.$threadId.done'
 
+const VerifyOtpRoute = VerifyOtpRouteImport.update({
+  id: '/verify-otp',
+  path: '/verify-otp',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/new': typeof NewRoute
   '/signup': typeof SignupRoute
+  '/verify-otp': typeof VerifyOtpRoute
   '/papers/$threadId/done': typeof PapersThreadIdDoneRoute
   '/papers/$threadId/progress': typeof PapersThreadIdProgressRoute
   '/papers/$threadId/review': typeof PapersThreadIdReviewRoute
@@ -67,6 +74,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/new': typeof NewRoute
   '/signup': typeof SignupRoute
+  '/verify-otp': typeof VerifyOtpRoute
   '/papers/$threadId/done': typeof PapersThreadIdDoneRoute
   '/papers/$threadId/progress': typeof PapersThreadIdProgressRoute
   '/papers/$threadId/review': typeof PapersThreadIdReviewRoute
@@ -77,6 +85,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/new': typeof NewRoute
   '/signup': typeof SignupRoute
+  '/verify-otp': typeof VerifyOtpRoute
   '/papers/$threadId/done': typeof PapersThreadIdDoneRoute
   '/papers/$threadId/progress': typeof PapersThreadIdProgressRoute
   '/papers/$threadId/review': typeof PapersThreadIdReviewRoute
@@ -88,6 +97,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/new'
     | '/signup'
+    | '/verify-otp'
     | '/papers/$threadId/done'
     | '/papers/$threadId/progress'
     | '/papers/$threadId/review'
@@ -97,6 +107,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/new'
     | '/signup'
+    | '/verify-otp'
     | '/papers/$threadId/done'
     | '/papers/$threadId/progress'
     | '/papers/$threadId/review'
@@ -106,6 +117,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/new'
     | '/signup'
+    | '/verify-otp'
     | '/papers/$threadId/done'
     | '/papers/$threadId/progress'
     | '/papers/$threadId/review'
@@ -116,6 +128,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   NewRoute: typeof NewRoute
   SignupRoute: typeof SignupRoute
+  VerifyOtpRoute: typeof VerifyOtpRoute
   PapersThreadIdDoneRoute: typeof PapersThreadIdDoneRoute
   PapersThreadIdProgressRoute: typeof PapersThreadIdProgressRoute
   PapersThreadIdReviewRoute: typeof PapersThreadIdReviewRoute
@@ -123,6 +136,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/verify-otp': {
+      id: '/verify-otp'
+      path: '/verify-otp'
+      fullPath: '/verify-otp'
+      preLoaderRoute: typeof VerifyOtpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/signup': {
       id: '/signup'
       path: '/signup'
@@ -180,6 +200,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   NewRoute: NewRoute,
   SignupRoute: SignupRoute,
+  VerifyOtpRoute: VerifyOtpRoute,
   PapersThreadIdDoneRoute: PapersThreadIdDoneRoute,
   PapersThreadIdProgressRoute: PapersThreadIdProgressRoute,
   PapersThreadIdReviewRoute: PapersThreadIdReviewRoute,

@@ -1,0 +1,52 @@
+QuickPaperAI/
+│
+├── core/                           # Standalone Business & Agentic Logic
+│   ├── config/                     # Configuration definitions
+│   │   ├── prompts.py              # LLM system/human prompt templates
+│   │   └── settings.py             # Parses env/system settings (No global clients initialized here!)
+│   │
+│   ├── models/                     # Shared Pydantic data schemas
+│   │   └── schemas.py              # PaperRequest, Question, QuestionTypes, etc.
+│   │
+│   ├── interfaces/                 # 🆕 ABSTRACT INTERFACES (Defines 'contracts')
+│   │   ├── db.py                   # UserRepository, ChunkRepository, PaperRepository interfaces
+│   │   ├── storage.py              # StorageService interface (upload/download file bytes)
+│   │   ├── mail.py                 # EmailService interface (OTP dispatch)
+│   │   └── compiler.py             # DocumentCompiler interface (compile PDF/DOCX bytes)
+│   │
+│   ├── services/                   # 🆕 Business services & factories
+│   │   └── llm_factory.py          # Lazy, runtime LLM client generator
+│   │
+│   ├── graph/                      # LangGraph multi-agent orchestrator
+│   │   ├── state.py                # Graph state definitions (using interfaces)
+│   │   ├── nodes.py                # Node logic (accepts injected adapters for DB/Compilers)
+│   │   └── builder.py              # Builds and compiles the LangGraph state machine
+│   │
+│   └── main.py                     # CLI run script (configured with CLI-specific adapters)
+│
+├── server/                         # FastAPI Web Application & Routing Layer
+│   ├── app.py                      # App initialization & CORS setup
+│   ├── main.py                     # Webserver execution entrypoint (Uvicorn configuration)
+│   ├── dependencies.py             # 🔄 Dependency Injection wireframe (instantiates adapters)
+│   │
+│   ├── security/                   # 🔄 RENAME from 'server/core/' (Prevents collision with root core/)
+│   │   ├── config.py               # Token expiration limits, JWT secrets
+│   │   └── security.py             # Bcrypt hashing & JWT encoders/decoders
+│   │
+│   ├── schemas/                    # Pydantic schemas for endpoint inputs/outputs
+│   │   ├── user_schemas.py         # UserRegister, UserLogin, UserResponse
+│   │   └── token_schemas.py        # JWT Token envelopes
+│   │
+│   ├── routes/                     # HTTP Router Controllers (Accepts repositories via DI)
+│   │   ├── auth_routes.py          # Registration, login, OTP endpoints
+│   │   ├── db_routes.py            # History retrieval & syllabus chapters lists
+│   │   └── paper_routes.py         # Generation triggers, cancellations, and status polling
+│   │
+│   └── adapters/                   # 🆕 CONCRETE INFRASTRUCTURE IMPLEMENTATIONS (Adapters)
+│       ├── supabase_db.py          # Implements UserRepository, ChunkRepository, PaperRepository
+│       ├── supabase_storage.py     # Implements StorageService for Supabase Buckets
+│       ├── redis_store.py          # Implements shared OTPStore & PROGRESS_TRACKER (Redis-based)
+│       ├── mailer.py               # Implements EmailService (FastMail / BREVO SMTP)
+│       └── document_compiler.py     # Implements DocumentCompiler (Playwright & Pandoc)
+│
+└── requirements.txt

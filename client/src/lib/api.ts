@@ -51,7 +51,15 @@ async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
     let errorDetail = "";
     try {
       const parsed = JSON.parse(body);
-      errorDetail = parsed.detail || "";
+      if (typeof parsed.detail === "string") {
+        errorDetail = parsed.detail;
+      } else if (Array.isArray(parsed.detail) && parsed.detail.length > 0) {
+        errorDetail = parsed.detail.map((d: any) => d.msg || JSON.stringify(d)).join(", ");
+      } else if (parsed.message) {
+        errorDetail = parsed.message;
+      } else {
+        errorDetail = typeof parsed === "string" ? parsed : body;
+      }
     } catch {
       errorDetail = body;
     }
@@ -65,6 +73,40 @@ export const api = {
     jsonFetch<any>("/auth/register", {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+
+  sendOtp: (payload: { email: string; purpose?: "signup" | "reset_password" }) =>
+    jsonFetch<{ message: string }>("/auth/send-email", {
+      method: "POST",
+      body: JSON.stringify({
+        email: payload.email,
+        purpose: payload.purpose || "signup",
+      }),
+    }),
+
+  verifyOtp: (payload: { email: string; otp: string; purpose?: "signup" | "reset_password" }) =>
+    jsonFetch<{
+      message: string;
+      access_token?: string;
+      token_type?: string;
+      reset_token?: string;
+    }>("/auth/verify-otp", {
+      method: "POST",
+      body: JSON.stringify({
+        email: payload.email,
+        otp: String(payload.otp),
+        purpose: payload.purpose || "signup",
+      }),
+    }),
+
+  resetPassword: (payload: { email: string; token: string; new_password: string }) =>
+    jsonFetch<{ message: string }>("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({
+        email: payload.email,
+        token: payload.token,
+        new_password: payload.new_password,
+      }),
     }),
 
   login: (payload: Record<string, any>) => {

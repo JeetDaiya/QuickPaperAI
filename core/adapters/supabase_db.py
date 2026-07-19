@@ -57,6 +57,14 @@ class SupabaseUserRepository(UserRepository):
         except SupabaseException as e:
             raise e
 
+    def activate_user(self, email: EmailStr):
+        try:
+            response = self.db.table("users").update({"is_active": True}).eq("email", email).execute()
+            return response.data[0] if response.data else None
+        except SupabaseException as e:
+            raise e
+
+
 class SupabasePaperRepository(PaperRepository):
     def __init__(self, client: Client) -> None:
         self.db = client

@@ -5,7 +5,7 @@ from typing import Optional
 class StorageService(ABC):
 
     @abstractmethod
-    def put_file(self, file_data: bytes, path: str, content_type: Optional[str] = None):
+    def put_file(self, file_data: bytes, file_path: str, content_type: Optional[str] = None):
         pass
 
     @abstractmethod
