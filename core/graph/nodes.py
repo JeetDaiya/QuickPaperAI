@@ -10,7 +10,7 @@ from core.models.schemas import BatchOutput, Question
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.types import Send, interrupt
 from core.config.rate_limiter import TokenBucket
-from core.graph.tracker import update_chapter_progress
+from core.graph.tracker import ProgressTracker
 import os
 
 generator_model = generator_model.with_structured_output(schema=BatchOutput)
@@ -47,7 +47,7 @@ def group_by_subtopic(chunks: list[dict], min_chars: int = 1500) -> list[dict]:
     batches = []
     current_topics = []
     current_content = ""
-    
+
     for topic, contents in topic_groups.items():
         topic_text = f"--- {topic} ---\n" + "\n\n".join(contents)
         
@@ -100,13 +100,18 @@ async def question_generator_node(state: ChapterState, config : RunnableConfig) 
     allowed_objective_types = [t for t in allowed_types if t.is_objective]
     allowed_subjective_types = [t for t in allowed_types if t.is_subjective]
 
-    chunk_repo = config["configurable"]["chunk_repo"]
+    configurable : GraphConfig = config.get("configurable", {})
+
+    chunk_repo = configurable.get("chunk_repo")
     chapter_chunks = chunk_repo.get_chapter_chunks(subject=subject, chapter=chapter)
     topic_batches = group_by_subtopic(chapter_chunks)
+
+    progress_tracker : ProgressTracker = configurable.get("progress_tracker")
+
     
     print(f"[{chapter}] {len(chapter_chunks)} chunks → {len(topic_batches)} topic batches")
 
-    update_chapter_progress(
+    await progress_tracker.update_chapter_progress(
         thread_id=state["thread_id"],
         chapter=chapter,
         status="processing",
@@ -185,7 +190,7 @@ async def question_generator_node(state: ChapterState, config : RunnableConfig) 
         print(f"  Batch {i+1}/{len(topic_batches)}: {batch['topics']}")
         
         await rate_limiter.acquire()
-        update_chapter_progress(
+        await progress_tracker.update_chapter_progress(
             thread_id=thread_id,
             chapter=chapter,
             status="processing",
@@ -219,7 +224,7 @@ async def question_generator_node(state: ChapterState, config : RunnableConfig) 
             q.diagram_prompt = clean_latex(q.diagram_prompt)
 
 
-    update_chapter_progress(
+    await progress_tracker.update_chapter_progress(
         thread_id=thread_id,
         chapter=chapter,
         status="completed",
@@ -298,7 +303,7 @@ def pdf_node(state: PaperState, config : RunnableConfig):
 
 
     paper_html = html_paper_formatter.render_paper(paper_request=paper_request, questions=selected_questions)
-    answer_html = html_paper_formatter.render_paper(paper_request=paper_request, questions=selected_questions)
+    answer_html = html_paper_formatter.render_answer_key(paper_request=paper_request, questions=selected_questions)
 
     paper_md = markdown_paper_formatter.render_paper(paper_request=paper_request, questions=selected_questions)
     # 1. Compile PDFs (Critical)

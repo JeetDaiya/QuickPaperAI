@@ -1,5 +1,7 @@
+from datetime import date
+from core.pdf.generator import SECTION_CONFIG
 from core.interfaces.paper_formatter import  PaperFormatter
-from core.models.schemas import PaperRequest, Question
+from core.models.schemas import PaperRequest, Question, QuestionTypes
 
 
 class HTMLPaperFormatter(PaperFormatter):
@@ -98,13 +100,13 @@ class HTMLPaperFormatter(PaperFormatter):
         Takes selected questions and paper request, returns a complete HTML string
         for the question paper.
         """
-        total_marks = sum(q.marks for q in selected_questions)
+        total_marks = sum(q.marks for q in questions)
         today = date.today().strftime("%d-%m-%Y")
         chapters_str = ", ".join(paper_request.chapters)
 
         # Group questions by type
         grouped: dict[QuestionTypes, list[Question]] = {}
-        for q in selected_questions:
+        for q in questions:
             if q.question_type not in grouped:
                 grouped[q.question_type] = []
             grouped[q.question_type].append(q)
@@ -118,8 +120,8 @@ class HTMLPaperFormatter(PaperFormatter):
             if q_type not in grouped:
                 continue
 
-            questions = grouped[q_type]
-            section_marks = sum(q.marks for q in questions)
+            q_list = grouped[q_type]
+            section_marks = sum(q.marks for q in q_list)
 
             sections_html += f"""
                 <div class="section">
@@ -129,8 +131,8 @@ class HTMLPaperFormatter(PaperFormatter):
                     </div>
                 """
 
-            for q in questions:
-                sections_html += _render_question_html(q, q_number)
+            for q in q_list:
+                sections_html += self._render_question_html(q, q_number)
                 q_number += 1
 
             sections_html += "</div>\n"
@@ -330,13 +332,13 @@ class HTMLPaperFormatter(PaperFormatter):
         Takes selected questions and paper request, returns a complete HTML string
         for the Answer Key & Marking Scheme.
         """
-        total_marks = sum(q.marks for q in selected_questions)
+        total_marks = sum(q.marks for q in questions)
         today = date.today().strftime("%d-%m-%Y")
         chapters_str = ", ".join(paper_request.chapters)
 
         # Group questions by type
         grouped: dict[QuestionTypes, list[Question]] = {}
-        for q in selected_questions:
+        for q in questions:
             if q.question_type not in grouped:
                 grouped[q.question_type] = []
             grouped[q.question_type].append(q)
@@ -350,7 +352,7 @@ class HTMLPaperFormatter(PaperFormatter):
             if q_type not in grouped:
                 continue
 
-            questions = grouped[q_type]
+            q_list = grouped[q_type]
             sections_html += f"""
                 <div class="section" style="margin-bottom: 25px;">
                     <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #666; padding-bottom: 4px; margin-bottom: 15px;">
@@ -358,15 +360,15 @@ class HTMLPaperFormatter(PaperFormatter):
                     </div>
                 """
 
-            for q in questions:
-                sections_html += _render_answer_html(q, q_number)
+            for q in q_list:
+                sections_html += self._render_answer_html(q, q_number)
                 q_number += 1
 
             sections_html += "</div>\n"
             section_number += 1
 
         # ── Compile Diagram Prompt Annex ──
-        diagram_questions = [(idx, q) for idx, q in enumerate(selected_questions, 1) if q.diagram_prompt]
+        diagram_questions = [(idx, q) for idx, q in enumerate(questions, 1) if q.diagram_prompt]
         annex_html = ""
         if diagram_questions:
             annex_html += """
