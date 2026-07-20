@@ -12,12 +12,12 @@ import uuid
 import os
 import asyncio
 from core.graph.state import PaperState
-from core.graph.tracker import update_chapter_progress, get_chapter_progress, PROGRESS_TRACKER
+from core.graph.tracker import ProgressTracker
 from pydantic import BaseModel
 from langgraph.types import Command
 from langgraph.graph.state import CompiledStateGraph
 from server.dependencies import get_current_user, get_chunk_repository, get_paper_repository, get_cloud_storage, \
-    get_local_storage, get_html_formatter, get_markdown_formatter, get_document_compiler
+    get_local_storage, get_html_formatter, get_markdown_formatter, get_document_compiler, get_progress_tracker
 
 paper_router = APIRouter(prefix='/api')
 
@@ -28,7 +28,7 @@ class ResumeRequest(BaseModel):
     selected_indices: list[int]
 
 
-async def graph_runner(agent, thread_id: str, request: PaperRequest, chunk_repo: ChunkRepository, html_paper_formatter : PaperFormatter, markdown_paper_formatter : PaperFormatter, document_compiler : DocumentCompiler):
+async def graph_runner(agent, thread_id: str, request: PaperRequest, chunk_repo: ChunkRepository, html_paper_formatter : PaperFormatter, markdown_paper_formatter : PaperFormatter, document_compiler : DocumentCompiler, progress_tracker : ProgressTracker):
     """Function which runs the graph in background"""
     initial_state : PaperState = {
         "all_questions" : [],
@@ -41,7 +41,8 @@ async def graph_runner(agent, thread_id: str, request: PaperRequest, chunk_repo:
         chunk_repo=chunk_repo,
         html_paper_formatter=html_paper_formatter,
         markdown_paper_formatter=markdown_paper_formatter,
-        document_compiler=document_compiler
+        document_compiler=document_compiler,
+        progress_tracker=progress_tracker
     )
     
     try:
@@ -50,7 +51,7 @@ async def graph_runner(agent, thread_id: str, request: PaperRequest, chunk_repo:
         print(f"❌ LangGraph run crashed on thread {thread_id}: {e}")
         # Mark all chapters as failed in in-memory state tracker
         for chapter in request.chapters:
-            update_chapter_progress(
+            await progress_tracker.update_chapter_progress(
                 thread_id=thread_id,
                 chapter=chapter,
                 status="failed",
@@ -154,12 +155,12 @@ async def upload_completed_paper_to_storage(thread_id : str,
     
     
 @paper_router.post('/generate')
-async def generate_paper(req : Request, paper_request : PaperRequest, current_user : dict = Depends(get_current_user), chunk_repo: ChunkRepository = Depends(get_chunk_repository), html_paper_formatter : PaperFormatter = Depends(get_html_formatter), markdown_paper_formatter : PaperFormatter = Depends(get_markdown_formatter), document_compiler : DocumentCompiler = Depends(get_document_compiler)):
+async def generate_paper(req : Request, paper_request : PaperRequest, current_user : dict = Depends(get_current_user), chunk_repo: ChunkRepository = Depends(get_chunk_repository), html_paper_formatter : PaperFormatter = Depends(get_html_formatter), markdown_paper_formatter : PaperFormatter = Depends(get_markdown_formatter), document_compiler : DocumentCompiler = Depends(get_document_compiler), progress_tracker : ProgressTracker = Depends(get_progress_tracker)):
     thread_id = str(uuid.uuid4())
 
     # 1. Initialize pending status for all chapters
     for chapter in paper_request.chapters:
-        update_chapter_progress(
+        await progress_tracker.update_chapter_progress(
             thread_id=thread_id,
             chapter=chapter,
             status="pending",
@@ -168,7 +169,7 @@ async def generate_paper(req : Request, paper_request : PaperRequest, current_us
 
     # 2. Schedule cancelable background task in the event loop
     agent = req.app.state.agent
-    task = asyncio.create_task(graph_runner(agent=agent, thread_id=thread_id, request=paper_request, chunk_repo=chunk_repo, html_paper_formatter=html_paper_formatter, markdown_paper_formatter=markdown_paper_formatter, document_compiler=document_compiler))
+    task = asyncio.create_task(graph_runner(agent=agent, thread_id=thread_id, request=paper_request, chunk_repo=chunk_repo, html_paper_formatter=html_paper_formatter, markdown_paper_formatter=markdown_paper_formatter, document_compiler=document_compiler, progress_tracker=progress_tracker))
     RUNNING_TASKS[thread_id] = task
     task.add_done_callback(lambda t: RUNNING_TASKS.pop(thread_id, None))
     
@@ -176,10 +177,34 @@ async def generate_paper(req : Request, paper_request : PaperRequest, current_us
     
 
 @paper_router.post('/resume/{thread_id}')
-async def resume_generation(thread_id: str, payload: ResumeRequest, req: Request, current_user : dict = Depends(get_current_user)):
+async def resume_generation(
+    thread_id: str, 
+    payload: ResumeRequest, 
+    req: Request, 
+    current_user : dict = Depends(get_current_user), 
+    progress_tracker : ProgressTracker = Depends(get_progress_tracker),
+    chunk_repo: ChunkRepository = Depends(get_chunk_repository),
+    html_paper_formatter : PaperFormatter = Depends(get_html_formatter),
+    markdown_paper_formatter : PaperFormatter = Depends(get_markdown_formatter),
+    document_compiler : DocumentCompiler = Depends(get_document_compiler)
+):
     """Feeds approved question indices and resumes the execution."""
     agent = req.app.state.agent
-    config = {"configurable": {"thread_id": thread_id}}
+
+    dependencies = GraphConfig(
+        chunk_repo=chunk_repo,
+        html_paper_formatter=html_paper_formatter,
+        markdown_paper_formatter=markdown_paper_formatter,
+        document_compiler=document_compiler,
+        progress_tracker=progress_tracker
+    )
+
+    config = {
+        "configurable": {
+            "thread_id": thread_id,
+            **dependencies
+        }
+    }
     
     # Verify thread is awaiting a review
     snapshot = await agent.aget_state(config)
@@ -197,7 +222,7 @@ async def resume_generation(thread_id: str, payload: ResumeRequest, req: Request
                 req_obj = snapshot.values["paper_request"]
                 chapters = req_obj.chapters if hasattr(req_obj, "chapters") else req_obj.get("chapters", [])
                 for chapter in chapters:
-                    update_chapter_progress(
+                    await progress_tracker.update_chapter_progress(
                         thread_id=thread_id,
                         chapter=chapter,
                         status="failed",
@@ -212,7 +237,7 @@ async def resume_generation(thread_id: str, payload: ResumeRequest, req: Request
 
 
 @paper_router.get('/status/{thread_id}')
-async def get_generation_status(thread_id: str, req: Request, current_user : dict = Depends(get_current_user), local_storage: StorageService = Depends(get_local_storage)):
+async def get_generation_status(thread_id: str, req: Request, current_user : dict = Depends(get_current_user), local_storage: StorageService = Depends(get_local_storage), progress_tracker : ProgressTracker = Depends(get_progress_tracker)):
     """Polled by client to fetch live counts or review prompts."""
     agent = req.app.state.agent
     config = {"configurable": {"thread_id": thread_id}}
@@ -269,7 +294,7 @@ async def get_generation_status(thread_id: str, req: Request, current_user : dic
             }
             
         # Check if it was marked as failed
-        progress = get_chapter_progress(thread_id)
+        progress = await progress_tracker.get_chapter_progress(thread_id)
         if progress and any(item.get("status") == "failed" for item in progress.values()):
             return {
                 "status": "failed",
@@ -277,7 +302,7 @@ async def get_generation_status(thread_id: str, req: Request, current_user : dic
             }
             
     # 3. Default: Return active generation status
-    progress = get_chapter_progress(thread_id)
+    progress = await progress_tracker.get_chapter_progress(thread_id)
     if progress:
         return {
             "status": "generating",
@@ -352,7 +377,7 @@ async def save_to_cloud(thread_id: str, req: Request, current_user : dict = Depe
         raise HTTPException(status_code=500, detail="Failed to save paper to cloud")
 
 @paper_router.delete('/cancel/{thread_id}')
-async def cancel_generation(thread_id: str, req: Request, current_user : dict = Depends(get_current_user), paper_repo : PaperRepository = Depends(get_paper_repository), cloud_storage : StorageService = Depends(get_cloud_storage), local_storage : StorageService = Depends(get_local_storage)):
+async def cancel_generation(thread_id: str, req: Request, current_user : dict = Depends(get_current_user), paper_repo : PaperRepository = Depends(get_paper_repository), cloud_storage : StorageService = Depends(get_cloud_storage), local_storage : StorageService = Depends(get_local_storage), progress_tracker : ProgressTracker = Depends(get_progress_tracker)):
     """Purges checkpoints, tracking states, active tasks, cloud storage files, and local caches for a thread."""
     try:
         # 1. Stop active background graph execution task if running
@@ -364,9 +389,8 @@ async def cancel_generation(thread_id: str, req: Request, current_user : dict = 
             RUNNING_TASKS.pop(thread_id, None)
 
         # 2. Purge in-memory progressive tracker
-        if thread_id in PROGRESS_TRACKER:
-            del PROGRESS_TRACKER[thread_id]
-            print(f"🧹 Purged progress tracker for thread {thread_id}")
+        await progress_tracker.delete_progress(thread_id=thread_id)
+        print(f"🧹 Purged progress tracker for thread {thread_id}")
 
         # 3. Purge PostgreSQL checkpointer checkpoints, blobs, and writes
         if hasattr(req.app.state, "db_pool") and req.app.state.db_pool:
