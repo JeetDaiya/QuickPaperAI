@@ -17,7 +17,6 @@ from core.adapters.markdown_paper_formatter import MarkdownPaperFormatter
 from core.adapters.supabase_db import SupabaseChunkRepository, SupabaseUserRepository, SupabasePaperRepository
 from core.adapters.supabase_storage import SupabaseStorageService
 from core.graph.builder import graph
-import os
 
 from core.interfaces.auth import AuthService
 from core.interfaces.db import ChunkRepository, UserRepository, PaperRepository
@@ -31,7 +30,7 @@ from core.interfaces.document_compiler import DocumentCompiler
 from core.interfaces.mail import EmailService
 from core.interfaces.paper_formatter import PaperFormatter
 from core.interfaces.storage import StorageService
-from server.core.config import SECRET_KEY, ALGORITHM
+from server.config import settings
 
 from fastapi import Request
 
@@ -75,7 +74,7 @@ def get_email_service() -> EmailService:
 def get_otp_store() -> OTPStore:
     global otp_store
     if otp_store is None:
-        redis_client = Redis(url=os.getenv("UPSTASH_REDIS_REST_URL"), token=os.getenv("UPSTASH_REDIS_REST_TOKEN"))
+        redis_client = Redis(url=settings.UPSTASH_REDIS_REST_URL, token=settings.UPSTASH_REDIS_REST_TOKEN)
         otp_store = RedisOTPStore(redis_client=redis_client)
         return  otp_store
     else:
@@ -83,7 +82,7 @@ def get_otp_store() -> OTPStore:
 
 @lru_cache
 def get_authentication_service(user_repo : UserRepository = Depends(get_user_repository)) -> AuthService:
-    return CustomAuthService(algorithm=ALGORITHM, secret_key=SECRET_KEY, user_repo=user_repo, token_expire_minutes=10080)
+    return CustomAuthService(algorithm=settings.ALGORITHM, secret_key=settings.SECRET_KEY, user_repo=user_repo, token_expire_minutes=10080)
 
 @lru_cache
 def get_html_formatter() -> PaperFormatter:
@@ -102,7 +101,7 @@ compiled_agent = None
 async def lifespan(app : FastAPI):
     global compiled_agent
     pool = AsyncConnectionPool(
-        conninfo=os.getenv("DB_URI"),
+        conninfo=settings.DB_URI,
         max_size=20,
         open=False,
         kwargs={

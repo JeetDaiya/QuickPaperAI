@@ -1,11 +1,11 @@
 import asyncio
-import os
 from psycopg_pool import AsyncConnectionPool
 from psycopg.rows import dict_row
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.types import Command
 
 from core.graph.builder import graph
+from server.config import settings
 
 # You MUST use the exact same thread_id that crashed!
 CRASHED_THREAD_ID = "thread_12"
@@ -15,7 +15,7 @@ async def recover_session():
     print(f"🚑 Attempting to recover session: {CRASHED_THREAD_ID}")
     
     async with AsyncConnectionPool(
-        conninfo=os.getenv("DB_URI"),
+        conninfo=settings.DB_URI,
         max_size=5,
         kwargs={"autocommit": True, "row_factory": dict_row, "prepare_threshold": None}
     ) as pool: 
