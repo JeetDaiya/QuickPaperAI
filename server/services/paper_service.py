@@ -5,6 +5,7 @@ import asyncio
 from fastapi import HTTPException
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
+from peewee import Database
 from starlette.requests import Request
 from starlette.responses import FileResponse
 
@@ -177,7 +178,7 @@ class PaperService:
             print(f"❌ Error recovering file from Supabase: {e}")
             raise HTTPException(status_code=500, detail="Failed to recover file from Supabase")
 
-    async def cancel_generation(self, thread_id: str, req: Request):
+    async def cancel_generation(self, thread_id: str, db_pool : Database):
         try:
             # 1. Stop active background graph execution task if running
             self.task_manager.cancel_task(thread_id=thread_id)
@@ -187,9 +188,9 @@ class PaperService:
             print(f"🧹 Purged progress tracker for thread {thread_id}")
 
             # 3. Purge PostgreSQL checkpointer checkpoints, blobs, and writes
-            if hasattr(req.app.state, "db_pool") and req.app.state.db_pool:
+            if db_pool:
                 try:
-                    async with req.app.state.db_pool.connection() as conn:
+                    async with db_pool.connection() as conn:
                         async with conn.cursor() as cur:
                             await cur.execute("DELETE FROM checkpoints WHERE thread_id = %s", (thread_id,))
                             await cur.execute("DELETE FROM checkpoint_blobs WHERE thread_id = %s", (thread_id,))
@@ -228,8 +229,7 @@ class PaperService:
             print(f"❌ Error during active session cancellation: {e}")
             raise HTTPException(status_code=500, detail="Failed to cancel and clean up generation session")
 
-    async def get_generation_status(self, thread_id: str, req: Request):
-        agent = req.app.state.agent
+    async def get_generation_status(self, thread_id: str, agent : CompiledStateGraph):
         config = {"configurable": {"thread_id": thread_id}}
 
         snapshot = await agent.aget_state(config=config)
@@ -299,12 +299,12 @@ class PaperService:
 
         return {"status": "uninitialized"}
 
-    async def generate_paper(self, req: Request, paper_request: PaperRequest):
+    async def generate_paper(self, req: Request, paper_request: PaperRequest, chapters: list[str], agent: CompiledStateGraph):
         thread_id = str(uuid.uuid4())
 
         await self.progress_tracker.update_chapters_progress(
             thread_id=thread_id,
-            chapters=paper_request.chapters,
+            chapters=chapters,
             status="pending"
         )
 
@@ -324,7 +324,6 @@ class PaperService:
                 progress_tracker=self.progress_tracker
             )
 
-            agent = req.app.state.agent
             try:
                 await run_graph(agent, initial_state, dependencies=dependencies)
             except Exception as e:
@@ -340,8 +339,8 @@ class PaperService:
 
         return {"thread_id": thread_id, "status": "generating"}
 
-    async def resume_generation(self, thread_id: str, selected_indices: list[int], req: Request):
-        agent = req.app.state.agent
+    async def resume_generation(self, thread_id: str, selected_indices: list[int], agent : CompiledStateGraph):
+
 
         dependencies = GraphConfig(
             chunk_repo=self.chunk_repo,

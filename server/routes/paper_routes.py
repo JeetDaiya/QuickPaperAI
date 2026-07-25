@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
-from core.models.schemas import PaperRequest
+from server.schemas.paper_schemas import PaperGenerateRequest
 from server.dependencies import get_current_user, get_paper_service
 from server.services.paper_service import PaperService
 
@@ -15,11 +15,13 @@ class ResumeRequest(BaseModel):
 @paper_router.post('/generate')
 async def generate_paper(
     req: Request,
-    paper_request: PaperRequest,
+    paper_request: PaperGenerateRequest,
     current_user: dict = Depends(get_current_user),
     paper_service: PaperService = Depends(get_paper_service)
 ):
-    return await paper_service.generate_paper(req=req, paper_request=paper_request)
+    agent = req.app.state.agent
+    chapters = paper_request.chapters
+    return await paper_service.generate_paper(req=req, paper_request=paper_request.to_domain(), agent=agent, chapters=chapters)
 
 
 @paper_router.post('/resume/{thread_id}')
@@ -30,10 +32,11 @@ async def resume_generation(
     current_user: dict = Depends(get_current_user),
     paper_service: PaperService = Depends(get_paper_service)
 ):
+    agent = req.app.state.agent
     return await paper_service.resume_generation(
         thread_id=thread_id,
         selected_indices=payload.selected_indices,
-        req=req
+        agent=agent,
     )
 
 
@@ -44,7 +47,8 @@ async def get_generation_status(
     current_user: dict = Depends(get_current_user),
     paper_service: PaperService = Depends(get_paper_service)
 ):
-    return await paper_service.get_generation_status(thread_id=thread_id, req=req)
+    agent = req.app.state.agent
+    return await paper_service.get_generation_status(thread_id=thread_id, agent=agent)
 
 
 @paper_router.get('/download/{thread_id}/{filename}')
@@ -55,6 +59,7 @@ async def download_file(
     current_user: dict = Depends(get_current_user),
     paper_service: PaperService = Depends(get_paper_service)
 ):
+
     return await paper_service.download_file(thread_id=thread_id, filename=filename, preview=preview)
 
 
@@ -77,4 +82,5 @@ async def cancel_generation(
     current_user: dict = Depends(get_current_user),
     paper_service: PaperService = Depends(get_paper_service)
 ):
-    return await paper_service.cancel_generation(thread_id=thread_id, req=req)
+    db_pool = req.app.state.db_pool
+    return await paper_service.cancel_generation(thread_id=thread_id, db_pool=db_pool)

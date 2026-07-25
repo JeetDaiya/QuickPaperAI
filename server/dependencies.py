@@ -39,6 +39,7 @@ from core.interfaces.otp_store import OTPStore
 from core.adapters.redis_otp_store import RedisOTPStore
 from upstash_redis.asyncio import Redis
 
+from server.services.db_service import DBService
 from server.services.paper_service import PaperService
 from server.services.task_manager import TaskManager
 
@@ -118,6 +119,12 @@ def get_paper_service(paper_repo: PaperRepository = Depends(get_paper_repository
         markdown_paper_formatter=markdown_paper_formatter,
         chunk_repo=chunk_repo,
         document_compiler=document_compiler
+    )
+
+@lru_cache
+def get_db_service(paper_repo : PaperRepository = Depends(get_paper_repository)) -> DBService:
+    return DBService(
+        paper_repo=paper_repo
     )
 
 compiled_agent = None
