@@ -7,7 +7,7 @@ class TaskManager:
 
     def register_task(self, thread_id: str, task: asyncio.Task):
         self._running_tasks[thread_id] = task
-        task.add_done_callback(lambda t: self._running_tasks.pop(thread_id))
+        task.add_done_callback(lambda t: self._running_tasks.pop(thread_id, None))
 
     def cancel_task(self, thread_id: str):
         if thread_id in self._running_tasks:
@@ -15,7 +15,6 @@ class TaskManager:
             if not task.done():
                 task.cancel()
                 print(f"Cancelled active background task: {thread_id}")
-            self._running_tasks.pop(thread_id)
 
     def is_running(self, thread_id: str) -> bool:
         task = self._running_tasks.get(thread_id)

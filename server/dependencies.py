@@ -39,6 +39,8 @@ from core.interfaces.otp_store import OTPStore
 from core.adapters.redis_otp_store import RedisOTPStore
 from upstash_redis.asyncio import Redis
 
+from server.services.paper_service import PaperService
+from server.services.task_manager import TaskManager
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='auth/login', auto_error=False)
 
@@ -97,8 +99,26 @@ def get_document_compiler() -> DocumentCompiler:
 
 @lru_cache
 def get_progress_tracker() -> ProgressTracker:
-    redis_client = Redis(url=os.getenv("UPSTASH_REDIS_REST_URL"), token=os.getenv("UPSTASH_REDIS_REST_TOKEN"))
+    redis_client = Redis(url=settings.UPSTASH_REDIS_REST_URL, token=settings.UPSTASH_REDIS_REST_TOKEN)
     return ProgressTracker(redis_client=redis_client, ttl_seconds=86400)
+
+@lru_cache
+def get_task_manager() -> TaskManager:
+    return TaskManager()
+
+@lru_cache
+def get_paper_service(paper_repo: PaperRepository = Depends(get_paper_repository), cloud_storage : StorageService = Depends(get_cloud_storage), local_storage : StorageService = Depends(get_local_storage), task_manager : TaskManager = Depends(get_task_manager), progress_tracker : ProgressTracker = Depends(get_progress_tracker), html_paper_formatter : PaperFormatter = Depends(get_html_formatter), markdown_paper_formatter = Depends(get_markdown_formatter), chunk_repo : ChunkRepository = Depends(get_chunk_repository), document_compiler : DocumentCompiler = Depends(get_document_compiler)) -> PaperService:
+    return PaperService(
+        progress_tracker=progress_tracker,
+        local_storage=local_storage,
+        cloud_storage=cloud_storage,
+        task_manager=task_manager,
+        paper_repo=paper_repo,
+        html_paper_formatter=html_paper_formatter,
+        markdown_paper_formatter=markdown_paper_formatter,
+        chunk_repo=chunk_repo,
+        document_compiler=document_compiler
+    )
 
 compiled_agent = None
 @asynccontextmanager
