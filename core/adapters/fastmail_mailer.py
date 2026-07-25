@@ -1,13 +1,15 @@
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from core.interfaces.mail import EmailService
-import os
+
+from server.config import settings
+
 
 class FastMailService(EmailService):
     def __init__(self):
         self.connection_config =  ConnectionConfig(
-            MAIL_FROM=os.getenv("MAIL_FROM"),
-            MAIL_USERNAME=os.getenv("MAIL_USERNAME"),
-            MAIL_PASSWORD=os.getenv("MAIL_PASSWORD"),
+            MAIL_FROM=settings.MAIL_FROM,
+            MAIL_USERNAME=settings.MAIL_USERNAME,
+            MAIL_PASSWORD=settings.MAIL_PASSWORD,
             MAIL_PORT=587,
             MAIL_SERVER="smtp-relay.brevo.com",
             MAIL_STARTTLS=True,

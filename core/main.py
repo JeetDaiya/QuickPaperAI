@@ -4,10 +4,10 @@ from core.models.schemas import QuestionTypes, PaperRequest
 from psycopg_pool import AsyncConnectionPool
 from psycopg.rows import dict_row
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-import os
 import asyncio
 import uuid
 
+from server.config import settings
 
 config = {"configurable" : {"thread_id" : str(uuid.uuid4())}, "max_concurrency" : 3}
 
@@ -18,7 +18,7 @@ async def run_agent():
     print("=" * 60)
     
     async with AsyncConnectionPool(
-        conninfo=os.getenv("DB_URI"),
+        conninfo=settings.DB_URI,
         max_size=20,
         kwargs={
             "autocommit" : True,

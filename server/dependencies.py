@@ -17,7 +17,6 @@ from core.adapters.markdown_paper_formatter import MarkdownPaperFormatter
 from core.adapters.supabase_db import SupabaseChunkRepository, SupabaseUserRepository, SupabasePaperRepository
 from core.adapters.supabase_storage import SupabaseStorageService
 from core.graph.builder import graph
-import os
 
 from core.graph.tracker import ProgressTracker
 from core.interfaces.auth import AuthService
@@ -32,7 +31,7 @@ from core.interfaces.document_compiler import DocumentCompiler
 from core.interfaces.mail import EmailService
 from core.interfaces.paper_formatter import PaperFormatter
 from core.interfaces.storage import StorageService
-from server.core.config import SECRET_KEY, ALGORITHM
+from server.config import settings
 
 from fastapi import Request
 
@@ -40,6 +39,9 @@ from core.interfaces.otp_store import OTPStore
 from core.adapters.redis_otp_store import RedisOTPStore
 from upstash_redis.asyncio import Redis
 
+from server.services.db_service import DBService
+from server.services.paper_service import PaperService
+from server.services.task_manager import TaskManager
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='auth/login', auto_error=False)
 
@@ -74,7 +76,7 @@ def get_email_service() -> EmailService:
 def get_otp_store() -> OTPStore:
     global otp_store
     if otp_store is None:
-        redis_client = Redis(url=os.getenv("UPSTASH_REDIS_REST_URL"), token=os.getenv("UPSTASH_REDIS_REST_TOKEN"))
+        redis_client = Redis(url=settings.UPSTASH_REDIS_REST_URL, token=settings.UPSTASH_REDIS_REST_TOKEN)
         otp_store = RedisOTPStore(redis_client=redis_client)
         return  otp_store
     else:
@@ -82,7 +84,7 @@ def get_otp_store() -> OTPStore:
 
 @lru_cache
 def get_authentication_service(user_repo : UserRepository = Depends(get_user_repository)) -> AuthService:
-    return CustomAuthService(algorithm=ALGORITHM, secret_key=SECRET_KEY, user_repo=user_repo, token_expire_minutes=10080)
+    return CustomAuthService(algorithm=settings.ALGORITHM, secret_key=settings.SECRET_KEY, user_repo=user_repo, token_expire_minutes=10080)
 
 @lru_cache
 def get_html_formatter() -> PaperFormatter:
@@ -98,15 +100,39 @@ def get_document_compiler() -> DocumentCompiler:
 
 @lru_cache
 def get_progress_tracker() -> ProgressTracker:
-    redis_client = Redis(url=os.getenv("UPSTASH_REDIS_REST_URL"), token=os.getenv("UPSTASH_REDIS_REST_TOKEN"))
+    redis_client = Redis(url=settings.UPSTASH_REDIS_REST_URL, token=settings.UPSTASH_REDIS_REST_TOKEN)
     return ProgressTracker(redis_client=redis_client, ttl_seconds=86400)
+
+@lru_cache
+def get_task_manager() -> TaskManager:
+    return TaskManager()
+
+@lru_cache
+def get_paper_service(paper_repo: PaperRepository = Depends(get_paper_repository), cloud_storage : StorageService = Depends(get_cloud_storage), local_storage : StorageService = Depends(get_local_storage), task_manager : TaskManager = Depends(get_task_manager), progress_tracker : ProgressTracker = Depends(get_progress_tracker), html_paper_formatter : PaperFormatter = Depends(get_html_formatter), markdown_paper_formatter = Depends(get_markdown_formatter), chunk_repo : ChunkRepository = Depends(get_chunk_repository), document_compiler : DocumentCompiler = Depends(get_document_compiler)) -> PaperService:
+    return PaperService(
+        progress_tracker=progress_tracker,
+        local_storage=local_storage,
+        cloud_storage=cloud_storage,
+        task_manager=task_manager,
+        paper_repo=paper_repo,
+        html_paper_formatter=html_paper_formatter,
+        markdown_paper_formatter=markdown_paper_formatter,
+        chunk_repo=chunk_repo,
+        document_compiler=document_compiler
+    )
+
+@lru_cache
+def get_db_service(paper_repo : PaperRepository = Depends(get_paper_repository)) -> DBService:
+    return DBService(
+        paper_repo=paper_repo
+    )
 
 compiled_agent = None
 @asynccontextmanager
 async def lifespan(app : FastAPI):
     global compiled_agent
     pool = AsyncConnectionPool(
-        conninfo=os.getenv("DB_URI"),
+        conninfo=settings.DB_URI,
         max_size=20,
         open=False,
         kwargs={

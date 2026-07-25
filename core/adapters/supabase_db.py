@@ -1,5 +1,4 @@
 from typing import Any
-
 from pydantic import EmailStr
 from typing_extensions import override
 from core.interfaces.db import  UserRepository, ChunkRepository, PaperRepository
@@ -69,7 +68,7 @@ class SupabasePaperRepository(PaperRepository):
     def __init__(self, client: Client) -> None:
         self.db = client
 
-    def get_user_paper_history(self, user_id: str):
+    def get_user_paper_history(self, user_id: str) -> list[dict]:
         try:
             response = (
                 self.db.table("generated_papers")
@@ -79,7 +78,7 @@ class SupabasePaperRepository(PaperRepository):
                 .execute()
             )
 
-            history_list = []
+            history_list : list[dict] = []
             for row in response.data:
                 thread_id = row.get("thread_id")
                 history_list.append({
@@ -94,7 +93,6 @@ class SupabasePaperRepository(PaperRepository):
                     "objective_count": row.get("objective_count", 0),
                     "subjective_count": row.get("subjective_count", 0),
                     "allowed_types": row.get("allowed_types", []),
-                    # Map raw Supabase paths to server-proxied download routes
                     "paper_pdf": f"/api/download/{thread_id}/paper.pdf",
                     "paper_docx": f"/api/download/{thread_id}/paper.docx",
                     "answer_pdf": f"/api/download/{thread_id}/answer.pdf"
