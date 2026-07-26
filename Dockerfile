@@ -22,8 +22,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN apt-get update && playwright install --with-deps chromium && rm -rf /var/lib/apt/lists/*
 
 # Copy the rest of the application code
-COPY core/ /app/core/
-COPY server/ /app/server/
+COPY src/ /app/src/
+COPY data/ /app/data/
 
 # Create output directory for caching generated papers
 RUN mkdir -p /app/outputs
@@ -32,5 +32,4 @@ RUN mkdir -p /app/outputs
 EXPOSE 8000
 
 # Start Uvicorn server (dynamically binds to PORT for environments like Railway)
-CMD ["sh", "-c", "uvicorn server.main:app --host 0.0.0.0 --port ${PORT:-8000} --timeout-keep-alive 120"]
-
+CMD ["sh", "-c", "uvicorn src.app:app --host 0.0.0.0 --port ${PORT:-8000} --timeout-keep-alive 120"]

@@ -127,3 +127,7 @@ authentication.md
 # Lovable & Vercel
 .lovable/
 .vercel/
+
+
+#firebase-credentials
+firebase-credentials.json
