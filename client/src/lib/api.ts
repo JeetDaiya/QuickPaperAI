@@ -182,6 +182,24 @@ export const api = {
       }[];
     }>("/api/db/history"),
 
+  registerDeviceToken: (payload: { token: string }) =>
+    jsonFetch<{ message: string }>("/auth/device-token", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateNotificationSettings: (payload: { notifications_enabled: boolean }) =>
+    jsonFetch<{ message: string }>("/auth/notification-settings", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  getNotificationSettings: () =>
+    jsonFetch<{
+      fcm_token: string | null;
+      notifications_enabled: boolean;
+    }>("/auth/notification-settings"),
+
   // The backend already returns absolute-relative paths for files, e.g.
   // "/api/download/<thread>/paper.pdf". Just join with the base.
   fileUrl: (apiPath: string) => {
@@ -194,3 +212,4 @@ export const api = {
     return `${API_BASE}${apiPath}`;
   }
 };
+

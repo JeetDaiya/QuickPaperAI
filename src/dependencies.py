@@ -19,6 +19,7 @@ from src.auth.adapters.redis_otp_store import RedisOTPStore
 from src.db.interfaces.interface import ChunkRepository, UserRepository, PaperRepository
 from src.db.adapters.supabase_db import SupabaseChunkRepository, SupabaseUserRepository, SupabasePaperRepository
 from src.db.services.service import DBService
+from src.notifications.adapters.firebase_notification_service import FirebaseNotificationService
 from src.paper.compilers.interfaces.interface import DocumentCompiler
 from src.paper.compilers.adapters.document_compiler import CustomDocumentCompiler
 from src.paper.formatters.interfaces.interface import PaperFormatter
@@ -66,6 +67,10 @@ def get_local_storage() -> StorageService:
 def get_email_service():
     from src.mail.adapters.fastmail_mailer import FastMailService
     return FastMailService()
+
+@lru_cache
+def get_notification_service()-> FirebaseNotificationService:
+    return FirebaseNotificationService()
 
 
 @lru_cache
@@ -125,7 +130,10 @@ def get_paper_service(
     html_paper_formatter: PaperFormatter = Depends(get_html_formatter),
     markdown_paper_formatter: PaperFormatter = Depends(get_markdown_formatter),
     chunk_repo: ChunkRepository = Depends(get_chunk_repository),
-    document_compiler: DocumentCompiler = Depends(get_document_compiler)
+    document_compiler: DocumentCompiler = Depends(get_document_compiler),
+    user_repo: UserRepository = Depends(get_user_repository),
+    notification_service : FirebaseNotificationService = Depends(get_notification_service)
+
 ) -> PaperService:
     return PaperService(
         progress_tracker=progress_tracker,
@@ -136,7 +144,9 @@ def get_paper_service(
         html_paper_formatter=html_paper_formatter,
         markdown_paper_formatter=markdown_paper_formatter,
         chunk_repo=chunk_repo,
-        document_compiler=document_compiler
+        document_compiler=document_compiler,
+        user_repo=user_repo,
+        notification_service=notification_service
     )
 
 

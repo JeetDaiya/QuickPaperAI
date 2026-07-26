@@ -24,6 +24,22 @@ class UserRepository(ABC):
     def activate_user(self, email: EmailStr):
         pass
 
+    @abstractmethod
+    def save_fcm_token(self, user_id: str, token: str):
+        pass
+
+    @abstractmethod
+    def update_notification_perms(self, user_id: str, notifications_enabled: bool):
+        pass
+
+    @abstractmethod
+    def get_fcm_token(self, user_id: str):
+        pass
+
+    @abstractmethod
+    def get_notification_perms(self, user_id: str):
+        pass
+
 
 class PaperRepository(ABC):
     @abstractmethod

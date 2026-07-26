@@ -32,3 +32,4 @@ fastapi-mail==1.6.4
 upstash-redis
 
 starlette
+peewee

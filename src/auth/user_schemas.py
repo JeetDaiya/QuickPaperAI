@@ -9,6 +9,7 @@ class UserRegister(BaseModel):
     password: str
     name: str
 
+
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
@@ -22,11 +23,6 @@ class UserResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
-
-
-class OTPVerification(BaseModel):
-    email: EmailStr
-    otp: str
 
 
 class OTPPurpose(str, Enum):
@@ -51,4 +47,9 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
-    
+class FCMTokenRequest(BaseModel):
+    token: str
+
+
+class NotificationToggleRequest(BaseModel):
+    notifications_enabled: bool
