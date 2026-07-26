@@ -1,13 +1,14 @@
 from typing import Any
 from pydantic import EmailStr
 from typing_extensions import override
-from src.db.interfaces.interface import  UserRepository, ChunkRepository, PaperRepository
+from src.db.interfaces.interface import UserRepository, ChunkRepository, PaperRepository
 from supabase import Client, SupabaseException
 
 
 class SupabaseChunkRepository(ChunkRepository):
     def __init__(self, client: Client) -> None:
         self.db = client
+
     @override
     def get_chapter_chunks(self, subject: str, chapter: str) -> list[dict]:
         try:
@@ -19,12 +20,11 @@ class SupabaseChunkRepository(ChunkRepository):
                 .order("chunk_index")
                 .execute()
             )
-
-            paper_chunks = response.data
-
-            return paper_chunks
+            return response.data
         except SupabaseException as e:
             raise e
+
+
 class SupabaseUserRepository(UserRepository):
     def __init__(self, client: Client) -> None:
         self.db = client
@@ -63,6 +63,40 @@ class SupabaseUserRepository(UserRepository):
         except SupabaseException as e:
             raise e
 
+    def save_fcm_token(self, user_id: str, token: str):
+        try:
+            self.db.table("users").update({"fcm_token": token}).eq("id", user_id.strip()).execute()
+            print(f"[INFO] FCM Token successfully saved to database for user {user_id}")
+            return True
+        except Exception as e:
+            print(f"[ERROR] Failed to save FCM token to database for user {user_id}: {e}")
+            return False
+
+    def update_notification_perms(self, user_id: str, notifications_enabled: bool):
+        try:
+            self.db.table("users").update({"notifications_enabled": notifications_enabled}).eq("id", user_id.strip()).execute()
+            print(f"[INFO] Notification perms ({notifications_enabled}) saved to database for user {user_id}")
+            return True
+        except Exception as e:
+            print(f"[ERROR] Failed to update notification perms in database: {e}")
+            return False
+
+    def get_notification_perms(self, user_id: str):
+        try:
+            response = self.db.table("users").select("notifications_enabled").eq("id", user_id.strip()).execute()
+            return response.data
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch notification perms from database: {e}")
+            return False
+
+    def get_fcm_token(self, user_id: str):
+        try:
+            response = self.db.table("users").select("fcm_token").eq("id", user_id.strip()).execute()
+            return response.data
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch FCM token from database: {e}")
+            return False
+
 
 class SupabasePaperRepository(PaperRepository):
     def __init__(self, client: Client) -> None:
@@ -78,7 +112,7 @@ class SupabasePaperRepository(PaperRepository):
                 .execute()
             )
 
-            history_list : list[dict] = []
+            history_list: list[dict] = []
             for row in response.data:
                 thread_id = row.get("thread_id")
                 history_list.append({
@@ -98,7 +132,7 @@ class SupabasePaperRepository(PaperRepository):
                     "answer_pdf": f"/api/download/{thread_id}/answer.pdf"
                 })
 
-            return  history_list
+            return history_list
 
         except SupabaseException as e:
             raise e
@@ -114,7 +148,6 @@ class SupabasePaperRepository(PaperRepository):
         except Exception as e:
             raise e
 
-
     def upload_paper_metadata(self, metadata: dict):
         try:
             self.db.table("generated_papers").insert(metadata).execute()
@@ -127,10 +160,9 @@ class SupabasePaperRepository(PaperRepository):
             return response
         except Exception as e:
             raise e
+
     def delete_paper_metadata(self, thread_id: str):
         try:
             self.db.table("generated_papers").delete().eq("thread_id", thread_id).execute()
         except Exception as e:
             raise e
-
-

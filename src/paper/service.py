@@ -1,23 +1,26 @@
 import os
 import uuid
 import asyncio
+from typing import Optional
 
 from fastapi import HTTPException
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
-from starlette.requests import Request
+from peewee import Database
 from starlette.responses import FileResponse
 
 from src.paper.graph.config import GraphConfig
 from src.paper.graph.runner import run_graph
 from src.paper.graph.state import PaperState
 from src.paper.graph.tracker import ProgressTracker
-from src.db.interfaces.interface import PaperRepository, ChunkRepository
+from src.db.interfaces.interface import PaperRepository, ChunkRepository, UserRepository
 from src.paper.compilers.interfaces.interface import DocumentCompiler
 from src.paper.formatters.interfaces.interface import PaperFormatter
 from src.storage.interfaces.interface import StorageService
 from src.paper.models import PaperRequest, ChapterStatus, DocumentType
 from src.paper.task_manager import TaskManager
+from src.notifications.adapters.firebase_notification_service import FirebaseNotificationService
+from src.notifications.constants.notification_messages import NotificationMessages
 
 
 class PaperService:
@@ -31,7 +34,9 @@ class PaperService:
         html_paper_formatter: PaperFormatter, 
         markdown_paper_formatter: PaperFormatter, 
         document_compiler: DocumentCompiler, 
-        chunk_repo: ChunkRepository
+        chunk_repo: ChunkRepository,
+        user_repo: UserRepository,
+        notification_service: FirebaseNotificationService
     ):
         self.task_manager = task_manager
         self.paper_repo = paper_repo
@@ -42,6 +47,8 @@ class PaperService:
         self.markdown_paper_formatter = markdown_paper_formatter
         self.document_compiler = document_compiler
         self.chunk_repo = chunk_repo
+        self.user_repo = user_repo
+        self.notification_service = notification_service
 
     async def save_to_cloud(self, thread_id: str, agent: CompiledStateGraph, user_id: str):
         try:
@@ -49,12 +56,12 @@ class PaperService:
             snapshot = await agent.aget_state(config)
 
             if not snapshot.values:
-                print(f"❌ No state found for thread {thread_id}")
+                print(f"[ERROR] No state found for thread {thread_id}")
                 return {"status": "failed"}
 
             paper_request = snapshot.values.get("paper_request")
             if not paper_request:
-                print(f"❌ No paper request found for thread {thread_id}")
+                print(f"[ERROR] No paper request found for thread {thread_id}")
                 return {"status": "failed"}
 
             paper_dict = paper_request.model_dump() if hasattr(paper_request, "model_dump") else paper_request
@@ -76,7 +83,7 @@ class PaperService:
                     relative_path = f"{thread_id}/{filename}"
                     files_data[filename] = self.local_storage.get_file(file_path=relative_path)
             except FileNotFoundError:
-                print(f"⚠️ Compiled files are missing locally in outputs/{thread_id}/, aborting upload.")
+                print(f"[WARN] Compiled files missing locally in outputs/{thread_id}/, aborting upload.")
                 return {"status": "failed"}
 
             file_paths = {}
@@ -90,9 +97,9 @@ class PaperService:
                         content_type=content_type
                     )
                     file_paths[filename] = storage_path
-                    print(f"☁️ Uploaded {filename} to Cloud Storage: {storage_path}")
+                    print(f"[INFO] Uploaded {filename} to Cloud Storage: {storage_path}")
                 except Exception as upload_err:
-                    print(f"❌ Failed to upload {filename} to cloud: {upload_err}")
+                    print(f"[ERROR] Failed to upload {filename} to cloud: {upload_err}")
                     return {"status": "failed"}
 
             try:
@@ -112,9 +119,9 @@ class PaperService:
                     "paper_docx_path": file_paths[DocumentType.PAPER_DOCX]
                 }
                 self.paper_repo.upload_paper_metadata(metadata=insert_data)
-                print(f"🎉 Successfully synced metadata for thread {thread_id} to generated_papers database table!")
+                print(f"[INFO] Successfully synced metadata for thread {thread_id} to generated_papers DB table!")
             except Exception as db_err:
-                print(f"❌ Database insert failed: {db_err}")
+                print(f"[ERROR] Database insert failed: {db_err}")
                 try:
                     for filename in filenames:
                         self.cloud_storage.delete_file(file_path=f"{thread_id}/{filename}")
@@ -125,11 +132,10 @@ class PaperService:
             return {"status": "success"}
 
         except Exception as e:
-            print(f"❌ Error Uploading completed paper to storage: {e}")
+            print(f"[ERROR] Error Uploading completed paper to storage: {e}")
             return {"status": "failed"}
 
     async def download_file(self, thread_id: str, filename: str, preview: bool = False):
-        """Streams compiled paper/answer key files securely. Supports inline browser previewing."""
         output_dir = f"outputs/{thread_id}"
         local_path = f"{output_dir}/{filename}"
 
@@ -146,7 +152,7 @@ class PaperService:
         if os.path.exists(local_path):
             return FileResponse(local_path, media_type=response_media_type, filename=response_filename)
 
-        print(f"🔄 Cache miss: Local file outputs/{thread_id}/{filename} not found. Attempting cloud recovery...")
+        print(f"[INFO] Cache miss: Local file outputs/{thread_id}/{filename} not found. Attempting cloud recovery...")
 
         column_mapping = {
             DocumentType.PAPER_PDF: "paper_pdf_path",
@@ -170,58 +176,55 @@ class PaperService:
             file_bytes = self.cloud_storage.get_file(file_path)
             self.local_storage.put_file(file_data=file_bytes, file_path=f"{thread_id}/{filename}")
 
-            print(f"✅ Recovered and hot-cached {filename} successfully from Supabase Storage.")
+            print(f"[INFO] Recovered and hot-cached {filename} successfully from Supabase Storage.")
             return FileResponse(local_path, media_type=response_media_type, filename=response_filename)
 
         except Exception as e:
-            print(f"❌ Error recovering file from Supabase: {e}")
+            print(f"[ERROR] Error recovering file from Supabase: {e}")
             raise HTTPException(status_code=500, detail="Failed to recover file from Supabase")
 
-    async def cancel_generation(self, thread_id: str, req: Request):
+    async def cancel_generation(self, thread_id: str, db_pool: Database):
         try:
             self.task_manager.cancel_task(thread_id=thread_id)
             await self.progress_tracker.delete_progress(thread_id=thread_id)
 
-            if hasattr(req.app.state, "db_pool") and req.app.state.db_pool:
-                try:
-                    async with req.app.state.db_pool.connection() as conn:
-                        async with conn.cursor() as cur:
-                            await cur.execute("DELETE FROM checkpoints WHERE thread_id = %s", (thread_id,))
-                            await cur.execute("DELETE FROM checkpoint_blobs WHERE thread_id = %s", (thread_id,))
-                            await cur.execute("DELETE FROM checkpoint_writes WHERE thread_id = %s", (thread_id,))
-                    print(f"🗄️ Cleaned all checkpointer DB entries for thread {thread_id}")
-                except Exception as dbe:
-                    print(f"⚠️ Warning: Could not clean Postgres checkpoints from Saver: {dbe}")
+            try:
+                async with db_pool.connection() as conn:
+                    async with conn.cursor() as cur:
+                        await cur.execute("DELETE FROM checkpoints WHERE thread_id = %s", (thread_id,))
+                        await cur.execute("DELETE FROM checkpoint_blobs WHERE thread_id = %s", (thread_id,))
+                        await cur.execute("DELETE FROM checkpoint_writes WHERE thread_id = %s", (thread_id,))
+                print(f"[INFO] Cleaned all checkpointer DB entries for thread {thread_id}")
+            except Exception as dbe:
+                print(f"[WARN] Could not clean Postgres checkpoints from Saver: {dbe}")
 
             try:
                 self.paper_repo.delete_paper_metadata(thread_id=thread_id)
             except Exception as sqle:
-                print(f"⚠️ Warning: Could not delete generated_papers metadata: {sqle}")
+                print(f"[WARN] Could not delete generated_papers metadata: {sqle}")
 
             try:
                 self.cloud_storage.delete_file(file_path=f"{thread_id}/{DocumentType.PAPER_PDF}")
                 self.cloud_storage.delete_file(file_path=f"{thread_id}/{DocumentType.ANSWER_PDF}")
                 self.cloud_storage.delete_file(file_path=f"{thread_id}/{DocumentType.PAPER_DOCX}")
             except Exception as storee:
-                print(f"⚠️ Warning: Cloud storage assets not found or could not be removed: {storee}")
+                print(f"[WARN] Cloud storage assets not found or could not be removed: {storee}")
 
             local_dir = f"outputs/{thread_id}"
             if self.local_storage.exists(file_path=f"{thread_id}/{DocumentType.PAPER_PDF}"):
                 self.local_storage.delete_file(file_path=f"{thread_id}/{DocumentType.PAPER_PDF}")
-                print(f"📂 Purged local server caches: {local_dir}")
+                print(f"[INFO] Purged local server caches: {local_dir}")
 
             return {
                 "status": "cancelled",
                 "message": f"Successfully aborted and cleaned up thread {thread_id} completely."
             }
         except Exception as e:
-            print(f"❌ Error during active session cancellation: {e}")
+            print(f"[ERROR] Error during active session cancellation: {e}")
             raise HTTPException(status_code=500, detail="Failed to cancel and clean up generation session")
 
-    async def get_generation_status(self, thread_id: str, req: Request):
-        agent = req.app.state.agent
+    async def get_generation_status(self, thread_id: str, agent: CompiledStateGraph, user_id: str):
         config = {"configurable": {"thread_id": thread_id}}
-
         snapshot = await agent.aget_state(config=config)
 
         is_awaiting_review = False
@@ -286,7 +289,7 @@ class PaperService:
 
         return {"status": "uninitialized"}
 
-    async def generate_paper(self, req: Request, paper_request: PaperRequest):
+    async def generate_paper(self, paper_request: PaperRequest, agent: CompiledStateGraph, user_fcm_token: Optional[str] = None):
         thread_id = str(uuid.uuid4())
 
         await self.progress_tracker.update_chapters_progress(
@@ -311,25 +314,61 @@ class PaperService:
                 progress_tracker=self.progress_tracker
             )
 
-            agent = req.app.state.agent
             try:
                 await run_graph(agent, initial_state, dependencies=dependencies)
+                print(f"[DEBUG] run_graph execution finished for thread {thread_id}")
+
+                snapshot = await agent.aget_state({"configurable": {"thread_id": thread_id}})
+                has_interrupts = bool(snapshot.tasks and snapshot.tasks[0].interrupts)
+                print(f"[DEBUG] Graph snapshot checked: has_interrupts={has_interrupts}, notification_service={bool(self.notification_service)}, user_fcm_token={'SET' if user_fcm_token else 'NONE'}")
+
+                if snapshot.tasks and snapshot.tasks[0].interrupts:
+                    questions = snapshot.tasks[0].interrupts[0].value.get("questions", [])
+                    if self.notification_service and user_fcm_token:
+                        print(f"[DEBUG] Dispatching FCM Push Notification for thread {thread_id}...")
+                        asyncio.create_task(
+                            self.notification_service.send_notification(
+                                thread_id=thread_id,
+                                token=user_fcm_token,
+                                message=NotificationMessages.format_paper_review_ready_body(
+                                    institution_name=paper_request.institution_name,
+                                    question_count=len(questions),
+                                    subject=paper_request.subject,
+                                    standard=paper_request.standard,
+                                ),
+                                title=NotificationMessages.PAPER_REVIEW_READY_TITLE
+                            )
+                        )
+                    elif not user_fcm_token:
+                        print(f"[DEBUG] Skipping Push Notification: user_fcm_token is None/Empty for user!")
+                    elif not self.notification_service:
+                        print(f"[DEBUG] Skipping Push Notification: notification_service is None!")
+
             except Exception as e:
-                print(f"❌ LangGraph run crashed on thread {thread_id}: {e}")
+                print(f"[ERROR] LangGraph run crashed on thread {thread_id}: {e}")
                 await self.progress_tracker.update_chapters_progress(
                     thread_id=thread_id,
                     chapters=paper_request.chapters,
                     status=ChapterStatus.FAILED
                 )
+                if self.notification_service and user_fcm_token:
+                    asyncio.create_task(
+                        self.notification_service.send_notification(
+                            thread_id=thread_id,
+                            token=user_fcm_token,
+                            message=NotificationMessages.format_paper_failed_body(
+                                institution_name=paper_request.institution_name,
+                            ),
+                            title=NotificationMessages.PAPER_FAILED_TITLE
+                        )
+                    )
 
         task = asyncio.create_task(graph_runner())
         self.task_manager.register_task(thread_id=thread_id, task=task)
 
         return {"thread_id": thread_id, "status": "generating"}
 
-    async def resume_generation(self, thread_id: str, selected_indices: list[int], req: Request):
-        agent = req.app.state.agent
-
+    async def resume_generation(self, thread_id: str, selected_indices: list[int], agent: CompiledStateGraph):
         dependencies = GraphConfig(
             chunk_repo=self.chunk_repo,
             html_paper_formatter=self.html_paper_formatter,
@@ -353,7 +392,7 @@ class PaperService:
             try:
                 await agent.ainvoke(Command(resume=selected_indices), config)
             except Exception as e:
-                print(f"❌ LangGraph run crashed on resume thread {thread_id}: {e}")
+                print(f"[ERROR] LangGraph run crashed on resume thread {thread_id}: {e}")
                 snapshot_err = await agent.aget_state(config)
                 if snapshot_err.values and "paper_request" in snapshot_err.values:
                     req_obj = snapshot_err.values["paper_request"]

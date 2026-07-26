@@ -1,5 +1,21 @@
 # =============================================================================
-# Python
+# Environment Variables & Secrets — NEVER commit API keys or credentials!
+# =============================================================================
+.env
+.env.*
+!.env.example
+!.env.template
+firebase-credentials.json
+*credential*.json
+*service-account*.json
+*.pem
+*.key
+*.p12
+*.pfx
+.dev.vars
+
+# =============================================================================
+# Python Dependencies & Virtual Environments
 # =============================================================================
 __pycache__/
 *.py[cod]
@@ -7,8 +23,8 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
-*.egg
 *.egg-info/
+*.egg
 dist/
 build/
 eggs/
@@ -17,42 +33,53 @@ var/
 sdist/
 wheels/
 pip-wheel-metadata/
-
-# =============================================================================
-# Virtual Environments
-# =============================================================================
 venv/
 .venv/
 env/
 ENV/
-env.bak/
-venv.bak/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # =============================================================================
-# Environment Variables — NEVER commit your API keys!
+# Node / Frontend Dependencies & Build Caches
 # =============================================================================
-.env
-.env.*
-!.env.example
+node_modules/
+dist/
+dist-ssr/
+.output/
+.vinxi/
+.tanstack/
+.nitro/
+.turbo/
+.parcel-cache/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # =============================================================================
-# Generated Output Files
+# Lovable, Vercel & Cloudflare Deployments
 # =============================================================================
+.lovable/
+.vercel/
+.wrangler/
+
+# =============================================================================
+# Local Media & Generated Output Artifacts
+# =============================================================================
+outputs/
 orchestrator_graph.png
-*.png
+*.pdf
+*.docx
 
 # =============================================================================
-# IDE & Editor
+# Logs & System Files
 # =============================================================================
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# =============================================================================
-# OS Files
-# =============================================================================
+*.log
+logs/
 .DS_Store
 .DS_Store?
 ._*
@@ -60,74 +87,18 @@ Thumbs.db
 ehthumbs.db
 
 # =============================================================================
-# Jupyter Notebooks (optional)
+# IDE, Editors & AI Assistant Local Files
 # =============================================================================
-.ipynb_checkpoints/
-
-# =============================================================================
-# Logs
-# =============================================================================
-*.log
-logs/
-
-# =============================================================================
-# Gemini / AI assistant local files
-# =============================================================================
-.gemini/
-.agents
-
-
-
-*.pdf
-Std_10_Chapters
-
-walkthrough.md
-*.docx
-project_structure.md
-frontend.md
-implementation.md
-
-outputs
-
-# Logs
-logs
-*.pd
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-.output
-.vinxi
-.tanstack/**
-.nitro
-*.local
-
-# Wrangler / Cloudflare
-.wrangler/
-.dev.vars
-
-# Editor directories and files
-.vscode/*
+.vscode/
 !.vscode/extensions.json
-.idea
-.DS_Store
+.idea/
+*.swp
+*.swo
+*~
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
-authentication.md
-
-# Lovable & Vercel
-.lovable/
-.vercel/
-
-
-#firebase-credentials
-firebase-credentials.json
+.ipynb_checkpoints/
+.gemini/
+.agents/

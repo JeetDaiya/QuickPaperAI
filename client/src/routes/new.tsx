@@ -7,12 +7,14 @@ import { upsertDraft, setActiveThread } from "@/lib/drafts";
 import {
   MODE_ALLOWED,
 } from "@/lib/paper-config";
+import { useFCMNotification } from "@/hooks/useFCMNotification";
 import type {
   Difficulty,
   GenerateRequest,
   PaperTypeMode,
   QuestionType,
 } from "@/lib/types";
+
 
 function getUnsavedStateKey(): string {
   if (typeof window === "undefined") return "qpa.unsaved_new_paper_state";
@@ -75,7 +77,9 @@ const MODES: PaperTypeMode[] = [
 
 function NewPaper() {
   const navigate = useNavigate();
+  const fcm = useFCMNotification();
   const [institutionName, setInstitutionName] = useState("");
+
   const [subject, setSubject] = useState<string>("");
   const [standard, setStandard] = useState<string>("");
   const [chapters, setChapters] = useState<string[]>([]);
@@ -330,6 +334,46 @@ function NewPaper() {
                 Discard
               </button>
             </div>
+          </div>
+        )}
+
+        {/* FCM Push Notification Banner & Settings */}
+        {fcm.permissionStatus !== "granted" ? (
+          <div className="mt-6 border border-[var(--paper-rule)] bg-[var(--card)] p-4 font-mono text-xs text-[var(--paper-foreground)] flex flex-wrap items-center justify-between gap-4 stamp-shadow">
+            <div className="flex items-center gap-2">
+              <span className="text-base">📲</span>
+              <div>
+                <span className="font-bold text-[var(--paper-foreground)]">Enable Push Notifications:</span> Get instant alerts on your device when your question papers complete generation.
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={fcm.loading}
+              onClick={fcm.requestPermission}
+              className="group inline-flex items-center gap-2 rounded-sm bg-[var(--ink)] px-4 py-2 text-[11px] uppercase tracking-wider text-[var(--ink-foreground)] transition hover:bg-[var(--vermillion)] cursor-pointer disabled:opacity-50"
+            >
+              <span>{fcm.loading ? "Requesting…" : "Enable Notifications"}</span>
+              <span aria-hidden>→</span>
+            </button>
+          </div>
+        ) : (
+          <div className="mt-6 border border-[var(--paper-rule)] bg-[var(--card)]/60 px-4 py-3 font-mono text-xs text-[var(--graphite)] flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-emerald-600 font-bold">✓</span>
+              <span>Push notifications active for this device</span>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer select-none text-[11px]">
+              <span>Alerts:</span>
+              <input
+                type="checkbox"
+                checked={fcm.notificationsEnabled}
+                onChange={(e) => fcm.toggleNotifications(e.target.checked)}
+                className="cursor-pointer accent-[var(--vermillion)]"
+              />
+              <span className="font-bold text-[var(--paper-foreground)]">
+                {fcm.notificationsEnabled ? "ON" : "OFF"}
+              </span>
+            </label>
           </div>
         )}
 

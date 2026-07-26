@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { DeskHeader } from "@/components/desk-header";
 import { loadDrafts, type DraftRecord, getActiveThread } from "@/lib/drafts";
 import { api } from "@/lib/api";
+import { useFCMNotification } from "@/hooks/useFCMNotification";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -20,7 +22,9 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
+  const fcm = useFCMNotification();
   const [drafts, setDrafts] = useState<DraftRecord[]>([]);
+
   const [active, setActive] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 

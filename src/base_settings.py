@@ -46,5 +46,11 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
+    FIREBASE_CREDENTIALS : str = ""
+
+
+    FRONTEND_URL: str = "http://localhost:8080"
+
+
 
 settings = Settings()

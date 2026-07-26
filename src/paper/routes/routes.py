@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Request
+from peewee import Database
 from pydantic import BaseModel
 
 from src.paper.schemas import PaperGenerateRequest
@@ -19,7 +20,10 @@ async def generate_paper(
     current_user: dict = Depends(get_current_user),
     paper_service: PaperService = Depends(get_paper_service)
 ):
-    return await paper_service.generate_paper(req=req, paper_request=paper_request.to_domain())
+    agent = req.app.state.agent
+    fcm_token = current_user.get('fcm_token') if current_user.get("notifications_enabled", True) else None
+    print(f"[DEBUG] POST /generate user: {current_user.get('email')}, fcm_token: {fcm_token}")
+    return await paper_service.generate_paper(agent=agent, paper_request=paper_request.to_domain(), user_fcm_token=fcm_token)
 
 
 @paper_router.post('/resume/{thread_id}')
@@ -30,10 +34,11 @@ async def resume_generation(
     current_user: dict = Depends(get_current_user),
     paper_service: PaperService = Depends(get_paper_service)
 ):
+    agent = req.app.state.agent
     return await paper_service.resume_generation(
         thread_id=thread_id,
         selected_indices=payload.selected_indices,
-        req=req
+        agent=agent,
     )
 
 
@@ -44,7 +49,9 @@ async def get_generation_status(
     current_user: dict = Depends(get_current_user),
     paper_service: PaperService = Depends(get_paper_service)
 ):
-    return await paper_service.get_generation_status(thread_id=thread_id, req=req)
+    agent = req.app.state.agent
+    user_id = str(current_user.get('user_id', ""))
+    return await paper_service.get_generation_status(thread_id=thread_id, agent=agent, user_id=user_id)
 
 
 @paper_router.get('/download/{thread_id}/{filename}')
@@ -77,4 +84,5 @@ async def cancel_generation(
     current_user: dict = Depends(get_current_user),
     paper_service: PaperService = Depends(get_paper_service)
 ):
-    return await paper_service.cancel_generation(thread_id=thread_id, req=req)
+    db_pool: Database = req.app.state.db_pool
+    return await paper_service.cancel_generation(thread_id=thread_id, db_pool=db_pool)
