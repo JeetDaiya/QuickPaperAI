@@ -15,8 +15,11 @@ class ProgressTracker:
         self.redis_client = redis_client
         self.ttl = ttl_seconds
 
-    def _get_key(self, thread_id: str) -> str:
+    def _get_progress_key(self, thread_id: str) -> str:
         return f"progress:{thread_id}"
+
+    def _get_cancel_key(self, thread_id: str) -> str:
+        return f"cancel:{thread_id}"
 
     async def update_chapters_progress(
         self,
@@ -40,7 +43,7 @@ class ProgressTracker:
         status: Union[ChapterStatus, str],
         generated_count: int = 0
     ):
-        key = self._get_key(thread_id=thread_id)
+        key = self._get_progress_key(thread_id=thread_id)
         payload = {
             "chapter": str(chapter),
             "status": str(status.value if hasattr(status, "value") else status),
@@ -54,7 +57,7 @@ class ProgressTracker:
             print(f"Updating progress failed for {thread_id}, chapter {chapter}, {e}")
 
     async def get_chapter_progress(self, thread_id: str) -> dict[str, ChapterProgress]:
-        key = self._get_key(thread_id=thread_id)
+        key = self._get_progress_key(thread_id=thread_id)
 
         try:
             raw_data = await self.redis_client.hgetall(key)
@@ -71,9 +74,29 @@ class ProgressTracker:
             return {}
 
     async def delete_progress(self, thread_id: str):
-        key = self._get_key(thread_id=thread_id)
+        key = self._get_progress_key(thread_id=thread_id)
 
         try:
             await self.redis_client.delete(key)
         except Exception as e:
             print(f"Deleting progress failed for {thread_id}, {e}")
+
+    async def mark_all_failed(self, thread_id: str):
+        progress = await self.get_chapter_progress(thread_id)
+        if progress:
+            chapters = list(progress.keys())
+            await self.update_chapters_progress(
+                thread_id=thread_id,
+                chapters=chapters,
+                status=ChapterStatus.FAILED
+            )
+
+    async def mark_cancelled(self, thread_id: str):
+        key = f"cancel:{thread_id}"
+        await self.redis_client.set(key, "true", ex=3600)
+
+    async def is_cancelled(self, thread_id: str) -> bool:
+        key = self._get_cancel_key(thread_id=thread_id)
+        val = await self.redis_client.get(key)
+        return val is not None
+

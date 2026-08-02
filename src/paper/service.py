@@ -289,7 +289,7 @@ class PaperService:
 
         return {"status": "uninitialized"}
 
-    async def generate_paper(self, paper_request: PaperRequest, agent: CompiledStateGraph, user_fcm_token: Optional[str] = None):
+    async def generate_paper(self, paper_request: PaperRequest, agent: Optional[CompiledStateGraph] = None, user_fcm_token: Optional[str] = None):
         thread_id = str(uuid.uuid4())
 
         await self.progress_tracker.update_chapters_progress(
@@ -298,73 +298,11 @@ class PaperService:
             status=ChapterStatus.PENDING
         )
 
-        async def graph_runner():
-            initial_state: PaperState = {
-                "all_questions": [],
-                "selected_questions": [],
-                "paper_request": paper_request,
-                "thread_id": thread_id
-            }
-
-            dependencies = GraphConfig(
-                chunk_repo=self.chunk_repo,
-                html_paper_formatter=self.html_paper_formatter,
-                markdown_paper_formatter=self.markdown_paper_formatter,
-                document_compiler=self.document_compiler,
-                progress_tracker=self.progress_tracker
-            )
-
-            try:
-                await run_graph(agent, initial_state, dependencies=dependencies)
-                print(f"[DEBUG] run_graph execution finished for thread {thread_id}")
-
-                snapshot = await agent.aget_state({"configurable": {"thread_id": thread_id}})
-                has_interrupts = bool(snapshot.tasks and snapshot.tasks[0].interrupts)
-                print(f"[DEBUG] Graph snapshot checked: has_interrupts={has_interrupts}, notification_service={bool(self.notification_service)}, user_fcm_token={'SET' if user_fcm_token else 'NONE'}")
-
-                if snapshot.tasks and snapshot.tasks[0].interrupts:
-                    questions = snapshot.tasks[0].interrupts[0].value.get("questions", [])
-                    if self.notification_service and user_fcm_token:
-                        print(f"[DEBUG] Dispatching FCM Push Notification for thread {thread_id}...")
-                        asyncio.create_task(
-                            self.notification_service.send_notification(
-                                thread_id=thread_id,
-                                token=user_fcm_token,
-                                message=NotificationMessages.format_paper_review_ready_body(
-                                    institution_name=paper_request.institution_name,
-                                    question_count=len(questions),
-                                    subject=paper_request.subject,
-                                    standard=paper_request.standard,
-                                ),
-                                title=NotificationMessages.PAPER_REVIEW_READY_TITLE
-                            )
-                        )
-                    elif not user_fcm_token:
-                        print(f"[DEBUG] Skipping Push Notification: user_fcm_token is None/Empty for user!")
-                    elif not self.notification_service:
-                        print(f"[DEBUG] Skipping Push Notification: notification_service is None!")
-
-            except Exception as e:
-                print(f"[ERROR] LangGraph run crashed on thread {thread_id}: {e}")
-                await self.progress_tracker.update_chapters_progress(
-                    thread_id=thread_id,
-                    chapters=paper_request.chapters,
-                    status=ChapterStatus.FAILED
-                )
-                if self.notification_service and user_fcm_token:
-                    asyncio.create_task(
-                        self.notification_service.send_notification(
-                            thread_id=thread_id,
-                            token=user_fcm_token,
-                            message=NotificationMessages.format_paper_failed_body(
-                                institution_name=paper_request.institution_name,
-                            ),
-                            title=NotificationMessages.PAPER_FAILED_TITLE
-                        )
-                    )
-
-        task = asyncio.create_task(graph_runner())
-        self.task_manager.register_task(thread_id=thread_id, task=task)
+        await self.task_manager.register_task(
+            thread_id=thread_id,
+            payload=paper_request.model_dump(),
+            user_fcm_token=user_fcm_token
+        )
 
         return {"thread_id": thread_id, "status": "generating"}
 
@@ -385,7 +323,18 @@ class PaperService:
         }
 
         snapshot = await agent.aget_state(config)
-        if not snapshot.tasks or not snapshot.tasks[0].interrupts:
+        has_interrupt = False
+        if snapshot.tasks:
+            for task in snapshot.tasks:
+                if task.interrupts:
+                    has_interrupt = True
+                    break
+
+        if not has_interrupt and snapshot.next and any("review" in str(node).lower() for node in snapshot.next):
+            has_interrupt = True
+
+        if not has_interrupt:
+            print(f"[WARN] Cannot resume thread {thread_id}: snapshot.next={snapshot.next}, snapshot.tasks={snapshot.tasks}")
             raise HTTPException(status_code=400, detail="No active review interrupts found for this thread.")
 
         async def resume_worker():
@@ -403,7 +352,6 @@ class PaperService:
                         status=ChapterStatus.FAILED
                     )
 
-        task = asyncio.create_task(resume_worker())
-        self.task_manager.register_task(thread_id=thread_id, task=task)
+        asyncio.create_task(resume_worker())
 
         return {"status": "resuming"}

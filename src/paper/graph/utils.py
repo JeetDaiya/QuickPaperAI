@@ -61,11 +61,24 @@ def group_by_subtopic(chunks: list[dict], min_chars: int = 1500) -> list[dict]:
 def build_quota_instructions(
     objective_count: int,
     subjective_count: int,
-    allowed_types: list[QuestionTypes]
+    allowed_types: list
 ) -> str:
     """Formulates dynamic quota prompt instructions to preserve variance and coverage."""
-    allowed_objective_types = [t for t in allowed_types if t.is_objective]
-    allowed_subjective_types = [t for t in allowed_types if t.is_subjective]
+    typed_allowed_types: list[QuestionTypes] = []
+    for t in allowed_types or []:
+        if isinstance(t, QuestionTypes):
+            typed_allowed_types.append(t)
+        elif isinstance(t, str):
+            try:
+                typed_allowed_types.append(QuestionTypes(t))
+            except ValueError:
+                try:
+                    typed_allowed_types.append(QuestionTypes[t.upper()])
+                except (KeyError, AttributeError):
+                    pass
+
+    allowed_objective_types = [t for t in typed_allowed_types if t.is_objective]
+    allowed_subjective_types = [t for t in typed_allowed_types if t.is_subjective]
 
     subjective_breakdown_str = ""
     if subjective_count > 0 and allowed_subjective_types:
@@ -113,7 +126,7 @@ def build_quota_instructions(
             f"Do NOT generate any objective questions.\n\n{subjective_breakdown_str}"
         )
     else:
-        allowed_all_values = ", ".join(t.value for t in allowed_types)
+        allowed_all_values = ", ".join(t.value for t in typed_allowed_types)
         return (
             f"Please generate 2-3 standard-compliant questions based strictly on this textbook content. "
             f"You are strictly allowed to generate only these question types: {allowed_all_values}."
