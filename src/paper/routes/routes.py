@@ -42,7 +42,7 @@ async def resume_generation(
     )
 
 
-@paper_router.get('/status/{thread_id}')
+@paper_router.get('/status/{thread_id}/stream')
 async def get_generation_status(
     thread_id: str,
     req: Request,

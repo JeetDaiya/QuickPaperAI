@@ -7,8 +7,7 @@ from psycopg.rows import dict_row
 
 from src.paper.graph.builder import graph
 from src.paper.models import QuestionTypes, PaperRequest
-from src.config import model_settings
-
+from src.base_settings import settings
 config = {"configurable": {"thread_id": str(uuid.uuid4())}, "max_concurrency": 3}
 
 
@@ -18,7 +17,7 @@ async def run_agent():
     print("=" * 60)
     
     async with AsyncConnectionPool(
-        conninfo=model_settings.DB_URI,
+        conninfo=settings.DB_URI,
         max_size=20,
         kwargs={
             "autocommit": True,

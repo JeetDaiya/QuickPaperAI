@@ -1,21 +1,48 @@
 import asyncio
+from typing import Optional
+from arq import ArqRedis
+from arq.jobs import Job, JobStatus
 
 
 class TaskManager:
-    def __init__(self):
-        self._running_tasks : dict[str, asyncio.Task] = dict()
+    """
+    Durable TaskManager utilizing ARQ Redis pool for background job enqueuing,
+    cancellation, and status monitoring.
+    """
+    def __init__(self, redis_pool: ArqRedis):
+        self.redis_pool = redis_pool
 
-    def register_task(self, thread_id: str, task: asyncio.Task):
-        self._running_tasks[thread_id] = task
-        task.add_done_callback(lambda t: self._running_tasks.pop(thread_id, None))
+    async def register_task(
+        self,
+        thread_id: str,
+        payload: dict,
+        user_fcm_token: Optional[str] = None
+    ) -> None:
+        await self.redis_pool.enqueue_job(
+            "generate_paper_task",
+            thread_id,
+            payload,
+            user_fcm_token,
+            _job_id=thread_id
+        )
+        print(f"[INFO] Task for thread {thread_id} enqueued into ARQ Redis pool.")
 
-    def cancel_task(self, thread_id: str):
-        if thread_id in self._running_tasks:
-            task = self._running_tasks.pop(thread_id)
-            if not task.done():
-                task.cancel()
-                print(f"Cancelled active background task: {thread_id}")
+    async def cancel_task(self, thread_id: str) -> bool:
+        try:
+            job = Job(job_id=thread_id, redis=self.redis_pool)
+            success = await job.abort()
+            print(f"[INFO] Aborted ARQ job for thread {thread_id}: {success}")
+            return success
+        except Exception as e:
+            print(f"[WARN] Could not cancel task {thread_id}: {e}")
+            return False
 
-    def is_running(self, thread_id: str) -> bool:
-        task = self._running_tasks.get(thread_id)
-        return task is not None and not task.done()
+    async def is_running(self, thread_id: str) -> bool:
+        try:
+            job = Job(job_id=thread_id, redis=self.redis_pool)
+            status = await job.status()
+            return status in (JobStatus.queued, JobStatus.in_progress)
+        except Exception as e:
+            print(f"[WARN] Could not get status of task {thread_id}: {e}")
+            return False
+

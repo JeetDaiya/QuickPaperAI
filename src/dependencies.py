@@ -32,6 +32,8 @@ from src.paper.task_manager import TaskManager
 from src.storage.interfaces.interface import StorageService
 from src.storage.adapters.local_storage import LocalStorageService
 from src.storage.adapters.supabase_storage import SupabaseStorageService
+from arq import create_pool
+from arq.connections import RedisSettings
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='auth/login', auto_error=False)
 supabase_client: Client = create_client(supabase_key=settings.SUPABASE_SERVICE_ROLE_KEY, supabase_url=settings.SUPABASE_URL)
@@ -115,9 +117,19 @@ def get_progress_tracker() -> ProgressTracker:
     return ProgressTracker(redis_client=redis_client, ttl_seconds=86400)
 
 
-@lru_cache
-def get_task_manager() -> TaskManager:
-    return TaskManager()
+arq_pool_instance = None
+
+async def get_arq_pool():
+    global arq_pool_instance
+    if arq_pool_instance is None:
+        redis_settings = RedisSettings.from_dsn(settings.REDIS_URL) if settings.REDIS_URL else RedisSettings()
+        arq_pool_instance = await create_pool(redis_settings)
+    return arq_pool_instance
+
+
+async def get_task_manager() -> TaskManager:
+    pool = await get_arq_pool()
+    return TaskManager(redis_pool=pool)
 
 
 @lru_cache

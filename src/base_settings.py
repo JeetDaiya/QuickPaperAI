@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     #Redis
     UPSTASH_REDIS_REST_URL: Optional[str] = None
     UPSTASH_REDIS_REST_TOKEN: Optional[str] = None
-
+    REDIS_URL : str = ""
     # --- Email SMTP (FastMail) ---
     MAIL_USERNAME: Optional[str] = None
     MAIL_PASSWORD: Optional[str] = None
