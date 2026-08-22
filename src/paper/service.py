@@ -10,8 +10,6 @@ from peewee import Database
 from starlette.responses import FileResponse
 
 from src.paper.graph.config import GraphConfig
-from src.paper.graph.runner import run_graph
-from src.paper.graph.state import PaperState
 from src.paper.graph.tracker import ProgressTracker
 from src.db.interfaces.interface import PaperRepository, ChunkRepository, UserRepository
 from src.paper.compilers.interfaces.interface import DocumentCompiler
@@ -20,7 +18,6 @@ from src.storage.interfaces.interface import StorageService
 from src.paper.models import PaperRequest, ChapterStatus, DocumentType
 from src.paper.task_manager import TaskManager
 from src.notifications.adapters.firebase_notification_service import FirebaseNotificationService
-from src.notifications.constants.notification_messages import NotificationMessages
 
 
 class PaperService:

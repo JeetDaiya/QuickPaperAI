@@ -1,51 +1,53 @@
 import os
 import subprocess
+import asyncio
 
 from src.paper.compilers.interfaces.interface import DocumentCompiler
-from playwright.sync_api import  sync_playwright
+from playwright.async_api import async_playwright
 
 
 class CustomDocumentCompiler(DocumentCompiler):
-    def generate_pdf(self, paper_html: str, paper_output_path: str, answer_html : str, answer_output_path: str):
-        with sync_playwright() as p:
-            browser = p.chromium.launch()
-            paper_page = browser.new_page()
-            answer_page = browser.new_page()
+    async def generate_pdf(self, paper_html: str, paper_output_path: str, answer_html: str, answer_output_path: str):
+        async with async_playwright() as p:
+            browser = await p.chromium.launch()
+            paper_page = await browser.new_page()
+            answer_page = await browser.new_page()
 
-            paper_page.set_content(paper_html)
-            answer_page.set_content(answer_html)
+            await paper_page.set_content(paper_html)
+            await answer_page.set_content(answer_html)
 
-            paper_page.wait_for_load_state("networkidle", timeout=90000)
-            answer_page.wait_for_load_state("networkidle", timeout=90000)
+            try:
+                await paper_page.wait_for_load_state("load", timeout=15000)
+                await answer_page.wait_for_load_state("load", timeout=15000)
+            except Exception as err:
+                print(f"[WARN] Playwright load state timeout (proceeding to generate PDF): {err}")
 
-            paper_page.pdf(
+            await paper_page.pdf(
                 path=paper_output_path,
                 format="A4",
                 print_background=True,
             )
 
-            answer_page.pdf(
+            await answer_page.pdf(
                 path=answer_output_path,
                 format="A4",
                 print_background=True
             )
 
-            browser.close()
+            await browser.close()
 
-    def generate_docx(self, markdown: str, output_path: str):
+    async def generate_docx(self, markdown: str, output_path: str):
         temp_md_path = output_path + ".temp.md"
 
         with open(temp_md_path, "w", encoding="utf-8") as f:
             f.write(markdown)
         try:
             cmd = ["pandoc", "-f", "markdown", "-t", "docx", temp_md_path, "-o", output_path]
-            subprocess.run(cmd, check=True)
-            print(f"🎉 DOCX Question Paper compiled successfully to {output_path}")
+            proc = await asyncio.create_subprocess_exec(*cmd)
+            await proc.communicate()
+            print(f"[INFO] DOCX Question Paper compiled successfully to {output_path}")
         except Exception as e:
-            print(f"⚠️ Pandoc DOCX compilation failed: {e}")
+            print(f"[WARN] Pandoc DOCX compilation failed: {e}")
         finally:
             if os.path.exists(temp_md_path):
                 os.remove(temp_md_path)
-
-
-

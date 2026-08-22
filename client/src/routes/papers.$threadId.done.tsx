@@ -1,8 +1,8 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { DeskHeader } from "@/components/desk-header";
 import { api } from "@/lib/api";
+import { useGenerationStatus } from "@/hooks/useGenerationStatus";
 
 export const Route = createFileRoute("/papers/$threadId/done")({
   beforeLoad: ({ location }) => {
@@ -36,14 +36,7 @@ function DonePage() {
   const [cloudStatus, setCloudStatus] = useState<"idle" | "pending" | "success" | "failed">("idle");
   const [cloudError, setCloudError] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["status", threadId],
-    queryFn: () => api.status(threadId),
-    refetchInterval: (q) =>
-      q.state.data?.status === "completed" || q.state.data?.status === "failed"
-        ? false
-        : 1500,
-  });
+  const { data, isLoading } = useGenerationStatus(threadId);
 
   const ready = data?.status === "completed";
   const failed = data?.status === "failed";

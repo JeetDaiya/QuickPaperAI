@@ -1,8 +1,8 @@
 import { createFileRoute, useNavigate, redirect } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { DeskHeader } from "@/components/desk-header";
 import { api } from "@/lib/api";
+import { useGenerationStatus } from "@/hooks/useGenerationStatus";
 import {
   isObjective,
   SECTION_ORDER,
@@ -27,10 +27,10 @@ export const Route = createFileRoute("/papers/$threadId/review")({
   },
   head: () => ({
     meta: [
-      { title: "Review — QuickPaperAI" },
+      { title: "Review Questions — QuickPaperAI" },
       {
         name: "description",
-        content: "Pick the question candidates you want on the final paper.",
+        content: "Curate the objective and subjective quota before compiling.",
       },
     ],
   }),
@@ -44,6 +44,7 @@ function getKatex(): any {
   }
   return null;
 }
+
 
 // Auto-wrap precise chemical formulas like H_2SO_4 or H^+ that aren't delimited with $
 function autoWrapMath(text: string): string {
@@ -162,19 +163,15 @@ function ReviewPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["status", threadId],
-    queryFn: () => api.status(threadId),
-    refetchInterval: (q) =>
-      q.state.data?.status === "awaiting_review" ? false : 1500,
-  });
+  const { data, isLoading, error } = useGenerationStatus(threadId);
 
-  const reviewData = data?.status === "awaiting_review" ? data : null;
+  const reviewData = data && data.status === "awaiting_review" ? data : null;
   const indexed: IndexedCandidate[] = useMemo(
     () =>
-      (reviewData?.questions ?? []).map((q, index) => ({ index, q })),
+      (reviewData?.questions ?? []).map((q: QuestionCandidate, index: number) => ({ index, q })),
     [reviewData],
   );
+
 
   const byChapter = useMemo(() => {
     const out: Record<string, IndexedCandidate[]> = {};

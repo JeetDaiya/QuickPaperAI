@@ -87,14 +87,14 @@ class CustomAuthService(AuthService):
             email = payload.get("sub")
 
             if not email:
-                raise HTTPException(status_code=400, detail="Invalid token")
+                raise HTTPException(status_code=401, detail="Invalid token")
 
             user = self.user_repo.get_user(email=email)
 
         except JWTError:
-            raise HTTPException(status_code=400, detail="Session expired or invalid Token")
+            raise HTTPException(status_code=401, detail="Session expired or invalid Token")
         except SupabaseException as e:
-            print(f"❌ DB Error fetching session user: {e}")
+            print(f"[ERROR] DB Error fetching session user: {e}")
             raise HTTPException(status_code=500, detail="Database session validation error")
 
         if not user:

@@ -1,9 +1,9 @@
 import { createFileRoute, useNavigate, Link, redirect } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { DeskHeader } from "@/components/desk-header";
 import { api } from "@/lib/api";
 import { updateDraftStatus } from "@/lib/drafts";
+import { useGenerationStatus } from "@/hooks/useGenerationStatus";
 import type { ChapterProgress } from "@/lib/types";
 
 export const Route = createFileRoute("/papers/$threadId/progress")({
@@ -37,16 +37,7 @@ function ProgressPage() {
   const { threadId } = Route.useParams();
   const navigate = useNavigate();
 
-  const { data, error, isLoading } = useQuery({
-    queryKey: ["status", threadId],
-    queryFn: () => api.status(threadId),
-    refetchInterval: (q) => {
-      const s = q.state.data?.status;
-      return s === "completed" || s === "failed" || s === "awaiting_review"
-        ? false
-        : 1500;
-    },
-  });
+  const { data, error, isLoading, isStreaming } = useGenerationStatus(threadId);
 
   useEffect(() => {
     if (!data) return;
@@ -81,8 +72,17 @@ function ProgressPage() {
       <main className="mx-auto max-w-6xl px-6 pt-12 pb-24">
         <div className="flex items-baseline justify-between gap-6">
           <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-[var(--vermillion-soft)]">
-              Sheet 02 — Live ledger
+            <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-[var(--vermillion-soft)] flex items-center gap-2">
+              <span>Sheet 02 — Live ledger</span>
+              {isStreaming && (
+                <span className="inline-flex items-center gap-1 border border-[var(--vermillion-soft)]/30 bg-[var(--vermillion-soft)]/10 px-2 py-0.5 text-[9px] uppercase tracking-wider text-[var(--vermillion-soft)] rounded">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--vermillion-soft)] opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[var(--vermillion-soft)]"></span>
+                  </span>
+                  SSE Real-Time
+                </span>
+              )}
             </p>
             <h1 className="mt-3 font-serif text-5xl">
               The questions are being generated<span className="cursor-blink" />
@@ -111,7 +111,7 @@ function ProgressPage() {
 
         {isLoading ? (
           <p className="mt-12 font-mono text-xs uppercase tracking-[0.2em] opacity-60">
-            Connecting to /api/status…
+            Connecting to /api/status stream…
           </p>
         ) : error ? (
           <ErrorBlock
@@ -209,14 +209,18 @@ function StitchedLedger({ chapters }: { chapters: ChapterProgress[] }) {
                   <span className="opacity-70 text-[9px] tracking-normal">questions</span>
                 </div>
               </div>
-              <div className="mt-2 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--ink-foreground)]/40">
-                {isDone
-                  ? "✓ complete"
-                  : isFailed
-                    ? "✗ failed"
-                    : ch.status === "processing"
-                      ? "● processing"
-                      : "○ pending"}
+              <div className="mt-2 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--ink-foreground)]/40 flex items-center gap-1.5">
+                {isDone ? (
+                  <span className="text-emerald-400 font-semibold">✓ complete</span>
+                ) : isFailed ? (
+                  <span className="text-rose-400 font-semibold">✗ failed</span>
+                ) : ch.status === "processing" ? (
+                  <span className="text-amber-400 font-semibold flex items-center gap-1">
+                    <span className="animate-spin">🔄</span> processing
+                  </span>
+                ) : (
+                  <span>⏳ pending</span>
+                )}
               </div>
               <div className="mt-3.5 relative h-2 w-full rounded-full bg-[var(--ink-rule)]/10 overflow-hidden">
                 <div

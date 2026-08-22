@@ -1,4 +1,4 @@
-# Handoff Document — AI-Powered Question Paper Generator
+`# Handoff Document — AI-Powered Question Paper Generator
 
 ## Project Overview
 
@@ -678,7 +678,48 @@ We migrated the background paper generation system from in-memory single-process
 
 ---
 
+### 7. Real-Time SSE Progress Streaming & Redis Pub/Sub Integration (COMPLETED — 2026-08-02)
+
+We implemented an end-to-end **Real-Time Server-Sent Events (SSE)** progress streaming pipeline across the backend (`src/`) and frontend client (`client/`):
+
+#### A. Backend Redis Pub/Sub & Streaming (`src/paper/graph/tracker.py` & `src/paper/routes/routes.py`)
+- **Pub/Sub Channel Key**: Added `_get_chanel_key(thread_id)` in `ProgressTracker` returning `channel:progress:{thread_id}`.
+- **Event Publishing (`update_chapter_progress`)**: Publishes JSON progress payloads (`chapter`, `status`, `generated_count`) to Redis Pub/Sub channel `channel:progress:{thread_id}` via `await self.redis_client.publish(channel=channel, message=json.dumps(payload))` as each chapter generates.
+- **FastAPI SSE Stream Endpoint (`GET /api/status/{thread_id}/stream`)**: Created streaming response endpoint using `text/event-stream` media type. Streams real-time progress events over 1 long-lived HTTP connection and terminates stream automatically when reaching `completed`, `failed`, or `awaiting_review` states.
+
+#### B. Frontend Stream URL Builder & Custom React Status Hook (`client/`)
+- **Stream URL Builder (`client/src/lib/api.ts`)**: Added `api.statusStreamUrl(threadId: string)` helper in `client/src/lib/api.ts` appending JWT token in query parameter (`?token=...`) for native browser `EventSource` authentication.
+- **Exclusive SSE Status Hook (`client/src/hooks/useGenerationStatus.ts`)**: Updated `useGenerationStatus(threadId: string)` to consume the SSE stream exclusively (`GET /api/status/${threadId}/stream?token=...`).
+  - **SSE Connection**: Establishes native `EventSource` stream connection.
+  - **Automatic Connection Termination**: Automatically closes stream connection (`es.close()`) when status reaches terminal states (`completed`, `failed`, or `awaiting_review`).
+  - **Unmount Cleanup**: Calls `eventSource.close()` inside `useEffect` cleanup callback to prevent open connections.
+
+#### C. UI Route Integration & PDF Preview (`client/src/routes/`)
+- **Progress Route (`client/src/routes/papers.$threadId.progress.tsx`)**: Consumes `useGenerationStatus(threadId)`. Renders `SSE Real-Time` indicator badge and zero-latency chapter progress statuses (`✓ complete`, `✗ failed`, `● processing`, `○ pending`).
+- **Review Route (`client/src/routes/papers.$threadId.review.tsx`)**: Consumes `useGenerationStatus(threadId)` with narrowed TypeScript discriminant union types.
+- **Done & Preview Route (`client/src/routes/papers.$threadId.done.tsx`)**: Updated to consume `useGenerationStatus(threadId)` and render the PDF iframe viewer using `${API_BASE}${files.paper_pdf}?preview=true&token=${token}` upon completion.
+- Verified 100% syntax compilation across `src/` (`python3 -m compileall src/`) and TypeScript type-checking across `client/` (`npx tsc --noEmit`).
+
+---
+
+### 8. Async Playwright PDF Generation Fix (COMPLETED — 2026-08-17)
+
+We resolved a critical runtime error in PDF document compilation:
+
+#### A. Root Cause
+- The old PDF compiler (`CustomDocumentCompiler`) was calling `sync_playwright()` inside `pdf_node` within Python's `asyncio` event loop (FastAPI & ARQ Background Worker).
+- Python's Playwright library throws `playwright._impl._errors.Error: It looks like you are using Playwright Sync API inside the asyncio loop` when synchronous Playwright methods are invoked inside an active `asyncio` loop.
+
+#### B. Async Conversion & Verification
+- **Interface (`src/paper/compilers/interfaces/interface.py`)**: Converted `generate_pdf` and `generate_docx` methods on `DocumentCompiler(ABC)` to `async def`.
+- **Adapter (`src/paper/compilers/adapters/document_compiler.py`)**: Converted `CustomDocumentCompiler` to consume `playwright.async_api.async_playwright` (`async with async_playwright() as p:`, `await p.chromium.launch()`, `await page.pdf(...)`).
+- **Graph Nodes (`src/paper/graph/nodes.py`)**: Converted `pdf_node` to `async def pdf_node` and added `await document_compiler.generate_pdf(...)` and `await document_compiler.generate_docx(...)`.
+- **Standalone Generator (`src/paper/compilers/generator.py`)**: Converted standalone CLI helper `generate_pdf` to `async def` using `async_playwright`.
+- Verified 100% compilation across `src/` (`python3 -m compileall src/`) and ran live headless Chromium test generating `/tmp/test_paper.pdf`.
+
+---
+
 ## Suggested Skills for Next Agent
 
 * **handoff**: Use the `handoff` skill to update or compact session context into `walkthrough.md` for team handoffs.
-* **grill-me**: Use `grill-me` when interviewing the user or stress-testing technical designs, API schemas, and feature proposals before implementation.
+* **grill-me**: Use `grill-me` when interviewing the user or stress-testing technical designs, API schemas, and feature proposals before implementation.`

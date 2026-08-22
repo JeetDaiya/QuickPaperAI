@@ -1,6 +1,6 @@
 from datetime import date
 from collections import OrderedDict
-from playwright.sync_api import sync_playwright
+from playwright.async_api import async_playwright
 
 from src.paper.models import QuestionTypes, Question, PaperRequest
 
@@ -524,32 +524,31 @@ def generate_answer_html(selected_questions: list[Question], paper_request: Pape
 
 
 
-def generate_pdf(paper_string, answer_string, paper_output_path, answer_output_path):
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        paper_page = browser.new_page()
-        answer_page = browser.new_page()
+async def generate_pdf(paper_string, answer_string, paper_output_path, answer_output_path):
+    async with async_playwright() as p:
+        browser = await p.chromium.launch()
+        paper_page = await browser.new_page()
+        answer_page = await browser.new_page()
         
-        paper_page.set_content(paper_string)
-        answer_page.set_content(answer_string)
+        await paper_page.set_content(paper_string)
+        await answer_page.set_content(answer_string)
 
-        paper_page.wait_for_load_state("networkidle", timeout=90000)
-        answer_page.wait_for_load_state("networkidle", timeout=90000)
+        await paper_page.wait_for_load_state("networkidle", timeout=90000)
+        await answer_page.wait_for_load_state("networkidle", timeout=90000)
         
-        paper_page.pdf(
+        await paper_page.pdf(
             path=paper_output_path,
             format="A4",
             print_background=True,
         )
         
-        answer_page.pdf(
+        await answer_page.pdf(
             path=answer_output_path,
             format="A4",
             print_background=True
         )
         
-        
-        browser.close()
+        await browser.close()
 
 
 def generate_docx(selected_questions: list[Question], paper_request: PaperRequest, output_path: str):
