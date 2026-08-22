@@ -158,7 +158,7 @@ def review_node(state: PaperState):
     return {"selected_questions": selected_questions}
 
 
-def pdf_node(state: PaperState, config: RunnableConfig):
+async def pdf_node(state: PaperState, config: RunnableConfig):
     """Generates the pdf from list of selected questions"""
     selected_questions = state["selected_questions"]
     thread_id = state["thread_id"]
@@ -177,20 +177,20 @@ def pdf_node(state: PaperState, config: RunnableConfig):
     paper_md = markdown_paper_formatter.render_paper(paper_request=paper_request, questions=selected_questions)
 
     try:
-        document_compiler.generate_pdf(
+        await document_compiler.generate_pdf(
             paper_html=paper_html,
             answer_html=answer_html,
             paper_output_path=f'{output_dir}/{DocumentType.PAPER_PDF}',
             answer_output_path=f'{output_dir}/{DocumentType.ANSWER_PDF}'
         )
     except Exception as e:
-        print(f"❌ Critical Failure: Failed to generate PDF documents: {e}")
+        print(f"[ERROR] Critical Failure: Failed to generate PDF documents: {e}")
         raise e
 
     try:
-        document_compiler.generate_docx(
+        await document_compiler.generate_docx(
             markdown=paper_md,
             output_path=f'{output_dir}/{DocumentType.PAPER_DOCX}',
         )
     except Exception as e:
-        print(f"⚠️ Soft Failure: Failed to generate DOCX document (continuing gracefully): {e}")
+        print(f"[WARN] Soft Failure: Failed to generate DOCX document (continuing gracefully): {e}")

@@ -210,6 +210,16 @@ export const api = {
       return `${API_BASE}${apiPath}${separator}token=${encodeURIComponent(token)}`;
     }
     return `${API_BASE}${apiPath}`;
+  },
+
+  statusStreamUrl: (threadId: string) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const url = `${API_BASE}/api/status/${encodeURIComponent(threadId)}/stream`;
+    if (token) {
+      return `${url}?token=${encodeURIComponent(token)}`;
+    }
+    return url;
   }
 };
+
 

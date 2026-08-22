@@ -349,7 +349,7 @@ function NewPaper() {
             <button
               type="button"
               disabled={fcm.loading}
-              onClick={fcm.requestPermission}
+              onClick={() => { void fcm.requestPermission(); }}
               className="group inline-flex items-center gap-2 rounded-sm bg-[var(--ink)] px-4 py-2 text-[11px] uppercase tracking-wider text-[var(--ink-foreground)] transition hover:bg-[var(--vermillion)] cursor-pointer disabled:opacity-50"
             >
               <span>{fcm.loading ? "Requesting…" : "Enable Notifications"}</span>

@@ -1,6 +1,10 @@
+import json
+import asyncio
+
 from fastapi import APIRouter, Depends, Request
 from peewee import Database
 from pydantic import BaseModel
+from starlette.responses import StreamingResponse
 
 from src.paper.schemas import PaperGenerateRequest
 from src.dependencies import get_current_user, get_paper_service
@@ -43,15 +47,39 @@ async def resume_generation(
 
 
 @paper_router.get('/status/{thread_id}/stream')
-async def get_generation_status(
+async def stream_generation_status(
     thread_id: str,
     req: Request,
     current_user: dict = Depends(get_current_user),
     paper_service: PaperService = Depends(get_paper_service)
 ):
-    agent = req.app.state.agent
-    user_id = str(current_user.get('user_id', ""))
-    return await paper_service.get_generation_status(thread_id=thread_id, agent=agent, user_id=user_id)
+    async def generator():
+        last_state = None
+
+        while True:
+            if await req.is_disconnected():
+                break
+            status_data = await paper_service.get_generation_status(thread_id=thread_id, agent=req.app.state.agent, user_id=str(current_user.get('user_id', "")))
+
+            current_state = json.dumps(status_data)
+
+            if current_state != last_state:
+                yield f"data: {current_state}\n\n"
+                last_state = current_state
+
+            if status_data.get("status") in ("completed", "failed", "awaiting_review"):
+                break
+            await asyncio.sleep(1)
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 
 @paper_router.get('/download/{thread_id}/{filename}')
