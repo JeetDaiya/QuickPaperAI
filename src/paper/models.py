@@ -2,6 +2,18 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Literal, Optional
 from enum import StrEnum
 
+class DifficultyDistribution(BaseModel):
+    easy: int
+    medium: int
+    hard: int
+
+
+    @model_validator(mode='after')
+    def verify_total(self):
+        total = self.easy + self.medium + self.hard
+        if total != 100:
+            raise ValueError('Difficulty distribution should sum to hundred')
+        return self
 
 class ChapterStatus(StrEnum):
     PENDING = "pending"
@@ -25,6 +37,13 @@ class PaperDifficulty(StrEnum):
     EASY = "Easy"
     BALANCED = "Balanced"
     HARD = "Hard"
+    MEDIUM = 'Medium'
+
+
+class QuestionDistribution(BaseModel):
+    question_difficulty : PaperDifficulty
+    question_count : int
+
 
 
 class QuestionTypes(StrEnum):
@@ -68,6 +87,7 @@ class PaperRequest(BaseModel):
         default_factory=lambda: list(QuestionTypes),
         description="List of allowed question types for this paper request."
     )
+    difficulty_distribution : DifficultyDistribution = Field(default_factory= lambda: DifficultyDistribution(easy=30 , medium=50, hard=20))
 
     @model_validator(mode="after")
     def validate_counts_and_types(self) -> "PaperRequest":

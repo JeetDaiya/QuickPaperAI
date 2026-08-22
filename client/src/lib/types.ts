@@ -2,6 +2,33 @@
 
 export type Difficulty = "Easy" | "Balanced" | "Hard";
 
+export interface DifficultyDistribution {
+  easy: number;
+  medium: number;
+  hard: number;
+}
+
+export const DIFFICULTY_PRESETS: Record<string, { label: string; modeLabel: Difficulty; description: string; distribution: DifficultyDistribution }> = {
+  BALANCED: {
+    label: "Balanced",
+    modeLabel: "Balanced",
+    description: "Standard 20/50/30 cognitive split",
+    distribution: { easy: 20, medium: 50, hard: 30 }
+  },
+  FOUNDATION: {
+    label: "Foundation",
+    modeLabel: "Easy",
+    description: "Focus on core concepts & memory (60/30/10)",
+    distribution: { easy: 60, medium: 30, hard: 10 }
+  },
+  CHALLENGE: {
+    label: "Challenge",
+    modeLabel: "Hard",
+    description: "High-order thinking & application (10/30/60)",
+    distribution: { easy: 10, medium: 30, hard: 60 }
+  }
+};
+
 export type PaperTypeMode =
   | "Balanced Standard Mode"
   | "MCQ-Only Mode"
@@ -34,7 +61,8 @@ export interface GenerateRequest {
   subject: string;
   standard: string;
   chapters: string[];
-  difficulty: Difficulty;
+  difficulty?: Difficulty;
+  difficulty_distribution: DifficultyDistribution;
   paper_type_mode: PaperTypeMode;
   allowed_types: QuestionType[];
   objective_count: number;

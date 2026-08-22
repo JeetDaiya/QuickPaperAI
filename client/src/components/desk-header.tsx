@@ -29,7 +29,7 @@ export function DeskHeader({ variant = "paper", step, hideNav = false }: DeskHea
   const handleSignOut = () => {
     localStorage.removeItem("token");
     setIsLoggedIn(false);
-    navigate({ to: "/login" });
+    navigate({ to: "/login", search: { redirect: "/", message: "signed_out" } });
   };
 
   return (

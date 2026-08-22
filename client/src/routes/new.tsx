@@ -10,11 +10,12 @@ import {
 import { useFCMNotification } from "@/hooks/useFCMNotification";
 import type {
   Difficulty,
+  DifficultyDistribution,
   GenerateRequest,
   PaperTypeMode,
   QuestionType,
 } from "@/lib/types";
-
+import { DIFFICULTY_PRESETS } from "@/lib/types";
 
 function getUnsavedStateKey(): string {
   if (typeof window === "undefined") return "qpa.unsaved_new_paper_state";
@@ -84,6 +85,13 @@ function NewPaper() {
   const [standard, setStandard] = useState<string>("");
   const [chapters, setChapters] = useState<string[]>([]);
   const [difficulty, setDifficulty] = useState<Difficulty>("Balanced");
+  const [difficultyDistribution, setDifficultyDistribution] = useState<DifficultyDistribution>({
+    easy: 20,
+    medium: 50,
+    hard: 30,
+  });
+  const [isCustomDifficulty, setIsCustomDifficulty] = useState(false);
+
   const [mode, setMode] = useState<PaperTypeMode>("Balanced Standard Mode");
   const [allowedTypes, setAllowedTypes] = useState<QuestionType[]>(
     MODE_ALLOWED["Balanced Standard Mode"],
@@ -95,6 +103,23 @@ function NewPaper() {
 
   const [unsavedState, setUnsavedState] = useState<any>(null);
   const [isRestoredOrStarted, setIsRestoredOrStarted] = useState(false);
+
+  const handleSelectPreset = (key: string) => {
+    const preset = DIFFICULTY_PRESETS[key];
+    if (preset) {
+      setDifficulty(preset.modeLabel);
+      setDifficultyDistribution(preset.distribution);
+      setIsCustomDifficulty(false);
+    }
+  };
+
+  const handleCustomDistChange = (field: keyof DifficultyDistribution, val: number) => {
+    const clamped = Math.max(0, Math.min(100, val || 0));
+    setDifficultyDistribution((prev) => ({
+      ...prev,
+      [field]: clamped,
+    }));
+  };
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -124,6 +149,7 @@ function NewPaper() {
         standard,
         chapters,
         difficulty,
+        difficultyDistribution,
         mode,
         allowedTypes,
         objectiveCount,
@@ -142,6 +168,7 @@ function NewPaper() {
     standard,
     chapters,
     difficulty,
+    difficultyDistribution,
     mode,
     allowedTypes,
     objectiveCount,
@@ -155,6 +182,13 @@ function NewPaper() {
       setStandard(unsavedState.standard || "");
       setChapters(unsavedState.chapters || []);
       setDifficulty(unsavedState.difficulty || "Balanced");
+      if (unsavedState.difficultyDistribution) {
+        setDifficultyDistribution(unsavedState.difficultyDistribution);
+      } else if (unsavedState.difficulty) {
+        const key = unsavedState.difficulty.toUpperCase();
+        const mapped = DIFFICULTY_PRESETS[key]?.distribution || { easy: 20, medium: 50, hard: 30 };
+        setDifficultyDistribution(mapped);
+      }
       setMode(unsavedState.mode || "Balanced Standard Mode");
       setAllowedTypes(
         unsavedState.allowedTypes ||
@@ -252,8 +286,15 @@ function NewPaper() {
     if (chapters.length === 0) return setError("Pick at least one chapter.");
     if (allowedTypes.length === 0)
       return setError("At least one allowed question type is required.");
-    if (objectiveCount + subjectiveCount === 0)
-      return setError("Total question count must be greater than zero.");
+    const totalDist =
+      difficultyDistribution.easy +
+      difficultyDistribution.medium +
+      difficultyDistribution.hard;
+    if (totalDist !== 100) {
+      return setError(
+        `Difficulty percentages must sum to 100% (currently ${totalDist}%).`
+      );
+    }
 
     const payload: GenerateRequest = {
       institution_name: institutionName.trim(),
@@ -261,6 +302,7 @@ function NewPaper() {
       standard,
       chapters,
       difficulty,
+      difficulty_distribution: difficultyDistribution,
       paper_type_mode: mode,
       allowed_types: allowedTypes,
       objective_count: objectiveCount,
@@ -297,7 +339,45 @@ function NewPaper() {
   }
 
   return (
-    <div className="min-h-screen surface-paper">
+    <div className="min-h-screen surface-paper relative">
+      {/* Floating Top-Right Toast Notification for Sum Enforcement */}
+      {(() => {
+        const currentSum =
+          difficultyDistribution.easy +
+          difficultyDistribution.medium +
+          difficultyDistribution.hard;
+        if (currentSum !== 100 && (isCustomDifficulty || (error && error.includes("100%")))) {
+          return (
+            <div className="fixed top-6 right-6 z-50 flex items-start gap-3.5 border border-[var(--vermillion)] bg-[var(--paper)] p-4 shadow-2xl rounded-sm border-l-4 border-l-[var(--vermillion)] max-w-sm">
+              <span className="text-xl shrink-0">⚠️</span>
+              <div className="flex-1 min-w-0">
+                <div className="font-mono text-xs uppercase tracking-[0.16em] font-bold text-[var(--vermillion)]">
+                  Sum Constraint Error
+                </div>
+                <p className="mt-1 font-mono text-xs text-[var(--ink)] leading-snug">
+                  Percentages must sum to 100% (currently{" "}
+                  <span className="font-bold text-[var(--vermillion)]">{currentSum}%</span>).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const diff = 100 - currentSum;
+                  setDifficultyDistribution((prev) => ({
+                    ...prev,
+                    medium: Math.max(0, prev.medium + diff),
+                  }));
+                }}
+                className="shrink-0 font-mono text-[10px] uppercase font-bold text-[var(--vermillion)] hover:bg-[var(--vermillion)] hover:text-[var(--paper)] transition cursor-pointer bg-[var(--vermillion)]/10 px-2.5 py-1 rounded-2xs border border-[var(--vermillion)]/30"
+              >
+                Auto-fix
+              </button>
+            </div>
+          );
+        }
+        return null;
+      })()}
+
       <DeskHeader step={1} />
 
       <main className="mx-auto max-w-4xl px-6 pt-20 pb-24 md:pl-28">
@@ -458,12 +538,185 @@ function NewPaper() {
             )}
           </FieldRow>
 
-          <FieldRow n={4} label="Difficulty">
-            <Segmented
-              value={difficulty}
-              options={DIFFICULTIES}
-              onChange={setDifficulty}
-            />
+          <FieldRow n={4} label="Difficulty Blueprint">
+            <div className="space-y-4">
+              {/* Stacked Tri-Color Distribution Progress Bar */}
+              <div className="border border-[var(--paper-rule)] bg-[var(--card)] p-3 rounded-sm stamp-shadow">
+                <div className="flex h-3 w-full rounded-2xs overflow-hidden bg-[var(--paper)]">
+                  <div
+                    style={{ width: `${Math.max(0, Math.min(100, difficultyDistribution.easy))}%` }}
+                    className="bg-emerald-600 transition-all duration-300"
+                    title={`Easy: ${difficultyDistribution.easy}%`}
+                  />
+                  <div
+                    style={{ width: `${Math.max(0, Math.min(100, difficultyDistribution.medium))}%` }}
+                    className="bg-[#005FAF] transition-all duration-300"
+                    title={`Medium: ${difficultyDistribution.medium}%`}
+                  />
+                  <div
+                    style={{ width: `${Math.max(0, Math.min(100, difficultyDistribution.hard))}%` }}
+                    className="bg-[#AF101A] transition-all duration-300"
+                    title={`Hard: ${difficultyDistribution.hard}%`}
+                  />
+                </div>
+                <div className="mt-2 flex flex-wrap justify-between px-1 font-mono text-[10px] uppercase tracking-[0.14em]">
+                  <span className="text-emerald-700 font-bold">🟢 Easy {difficultyDistribution.easy}%</span>
+                  <span className="text-[#005FAF] font-bold">🔵 Medium {difficultyDistribution.medium}%</span>
+                  <span className="text-[#AF101A] font-bold">🔴 Hard {difficultyDistribution.hard}%</span>
+                  <span className={`ml-auto ${difficultyDistribution.easy + difficultyDistribution.medium + difficultyDistribution.hard === 100 ? "text-[var(--graphite)]" : "text-[var(--vermillion)] font-bold"}`}>
+                    Total: {difficultyDistribution.easy + difficultyDistribution.medium + difficultyDistribution.hard}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Preset Cards Grid (4 Equal Tiles) */}
+              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                {Object.entries(DIFFICULTY_PRESETS).map(([key, preset]) => {
+                  const isSelected =
+                    !isCustomDifficulty &&
+                    difficultyDistribution.easy === preset.distribution.easy &&
+                    difficultyDistribution.medium === preset.distribution.medium &&
+                    difficultyDistribution.hard === preset.distribution.hard;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => handleSelectPreset(key)}
+                      className={`flex flex-col justify-between text-left border p-3.5 transition rounded-sm cursor-pointer ${
+                        isSelected
+                          ? "border-[var(--ink)] bg-[var(--card)] shadow-xs ring-1 ring-[var(--ink)]"
+                          : "border-[var(--paper-rule)] bg-[var(--surface)] hover:border-[var(--graphite)]"
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="font-serif font-bold text-base">{preset.label}</span>
+                          {isSelected && <span className="font-mono text-xs text-[var(--vermillion)] font-bold">✓</span>}
+                        </div>
+                        <p className="mt-1 font-mono text-[10px] text-[var(--graphite)] leading-tight">
+                          {preset.description}
+                        </p>
+                      </div>
+                      <div className="mt-3 pt-2 border-t border-[var(--paper-rule)] font-mono text-[10px] text-[var(--paper-foreground)]">
+                        {preset.distribution.easy}%E · {preset.distribution.medium}%M · {preset.distribution.hard}%H
+                      </div>
+                    </button>
+                  );
+                })}
+
+                {/* 4th Card: Custom Allocation Tile */}
+                <button
+                  type="button"
+                  onClick={() => setIsCustomDifficulty(true)}
+                  className={`flex flex-col justify-between text-left border p-3.5 transition rounded-sm cursor-pointer ${
+                    isCustomDifficulty
+                      ? "border-[var(--ink)] bg-[var(--card)] shadow-xs ring-1 ring-[var(--ink)]"
+                      : "border-[var(--paper-rule)] bg-[var(--surface)] hover:border-[var(--graphite)]"
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-serif font-bold text-base">⚙️ Custom %</span>
+                      {isCustomDifficulty && <span className="font-mono text-xs text-[var(--vermillion)] font-bold">✓</span>}
+                    </div>
+                    <p className="mt-1 font-mono text-[10px] text-[var(--graphite)] leading-tight">
+                      Specify exact custom percentages
+                    </p>
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-[var(--paper-rule)] font-mono text-[10px] text-[var(--vermillion)] font-bold">
+                    Interactive Sliders
+                  </div>
+                </button>
+              </div>
+
+              {/* Custom Sliders & Inputs Panel */}
+              {isCustomDifficulty && (
+                <div className="border border-[var(--ink)] bg-[var(--card)] p-5 rounded-sm space-y-4 stamp-shadow animate-shuffle">
+                  <div className="flex items-center justify-between border-b border-[var(--paper-rule)] pb-2">
+                    <div className="font-mono text-[11px] uppercase tracking-[0.18em] font-bold text-[var(--ink)]">
+                      ⚙️ Custom Cognitive Percentages
+                    </div>
+                    <div className="font-mono text-[10px] text-[var(--graphite)]">
+                      Constraint: Must equal <span className="font-bold text-[var(--ink)]">100%</span>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-5 sm:grid-cols-3">
+                    {/* Easy Slider */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between font-mono text-[10px] uppercase font-bold text-emerald-700">
+                        <span>🟢 Easy</span>
+                        <span>{difficultyDistribution.easy}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={difficultyDistribution.easy}
+                        onChange={(e) => handleCustomDistChange("easy", parseInt(e.target.value) || 0)}
+                        className="w-full accent-emerald-600 cursor-pointer"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={difficultyDistribution.easy}
+                        onChange={(e) => handleCustomDistChange("easy", parseInt(e.target.value) || 0)}
+                        className="w-full border border-[var(--paper-rule)] bg-[var(--paper)] p-2 font-mono text-xs outline-none focus:border-emerald-600 text-center"
+                      />
+                    </div>
+
+                    {/* Medium Slider */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between font-mono text-[10px] uppercase font-bold text-[#005FAF]">
+                        <span>🔵 Medium</span>
+                        <span>{difficultyDistribution.medium}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={difficultyDistribution.medium}
+                        onChange={(e) => handleCustomDistChange("medium", parseInt(e.target.value) || 0)}
+                        className="w-full accent-[#005FAF] cursor-pointer"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={difficultyDistribution.medium}
+                        onChange={(e) => handleCustomDistChange("medium", parseInt(e.target.value) || 0)}
+                        className="w-full border border-[var(--paper-rule)] bg-[var(--paper)] p-2 font-mono text-xs outline-none focus:border-[#005FAF] text-center"
+                      />
+                    </div>
+
+                    {/* Hard Slider */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between font-mono text-[10px] uppercase font-bold text-[#AF101A]">
+                        <span>🔴 Hard</span>
+                        <span>{difficultyDistribution.hard}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={difficultyDistribution.hard}
+                        onChange={(e) => handleCustomDistChange("hard", parseInt(e.target.value) || 0)}
+                        className="w-full accent-[#AF101A] cursor-pointer"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={difficultyDistribution.hard}
+                        onChange={(e) => handleCustomDistChange("hard", parseInt(e.target.value) || 0)}
+                        className="w-full border border-[var(--paper-rule)] bg-[var(--paper)] p-2 font-mono text-xs outline-none focus:border-[#AF101A] text-center"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </FieldRow>
 
           <FieldRow n={5} label="Paper type mode">
