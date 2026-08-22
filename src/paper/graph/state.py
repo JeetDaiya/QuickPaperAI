@@ -1,6 +1,6 @@
 from typing import TypedDict, Annotated
 import operator
-from src.paper.models import Question, PaperRequest, QuestionTypes
+from src.paper.models import Question, PaperRequest, QuestionTypes, DifficultyDistribution
 
 
 class PaperState(TypedDict):
@@ -17,3 +17,4 @@ class ChapterState(TypedDict):
     subjective_count: int
     allowed_types: list[QuestionTypes]
     thread_id: str
+    difficulty_distribution: DifficultyDistribution

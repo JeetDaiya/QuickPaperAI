@@ -116,9 +116,8 @@ function VerifyOtpPage() {
           new_password: newPassword,
         });
 
-        setSuccess(true);
         setTimeout(() => {
-          navigate({ to: "/login", search: { message: "password_reset" } });
+          navigate({ to: "/login", search: { redirect: "/", message: "password_reset" } });
         }, 1000);
       } else {
         // Signup verification flow
@@ -287,6 +286,7 @@ function VerifyOtpPage() {
               <div className="pt-4 flex items-center justify-between border-t border-[var(--paper-rule)]">
                 <Link
                   to="/login"
+                  search={{ redirect: "/", message: undefined }}
                   className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--graphite)] hover:text-[var(--vermillion)] hover:underline-hand pb-0.5 transition-colors"
                 >
                   Back to Sign In

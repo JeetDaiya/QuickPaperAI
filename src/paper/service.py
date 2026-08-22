@@ -9,6 +9,7 @@ from langgraph.types import Command
 from peewee import Database
 from starlette.responses import FileResponse
 
+from src.paper.models import DifficultyDistribution
 from src.paper.graph.config import GraphConfig
 from src.paper.graph.tracker import ProgressTracker
 from src.db.interfaces.interface import PaperRepository, ChunkRepository, UserRepository
@@ -56,21 +57,13 @@ class PaperService:
                 print(f"[ERROR] No state found for thread {thread_id}")
                 return {"status": "failed"}
 
-            paper_request = snapshot.values.get("paper_request")
-            if not paper_request:
+            raw_req = snapshot.values.get("paper_request")
+            if not raw_req:
                 print(f"[ERROR] No paper request found for thread {thread_id}")
                 return {"status": "failed"}
 
-            paper_dict = paper_request.model_dump() if hasattr(paper_request, "model_dump") else paper_request
-
-            institution_name = paper_dict.get("institution_name", "Unknown")
-            subject = paper_dict.get("subject", "Unknown")
-            chapters = paper_dict.get("chapters", [])
-            standard = paper_dict.get("standard", [])
-            difficulty = paper_dict.get("difficulty", "Balanced")
-            objective_count = paper_dict.get("objective_count", 0)
-            subjective_count = paper_dict.get("subjective_count", 0)
-            allowed_types = [t.value if hasattr(t, "value") else str(t) for t in paper_dict.get("allowed_types", [])]
+            # Strongly-typed Domain Model Instantiation
+            paper_request = raw_req if isinstance(raw_req, PaperRequest) else PaperRequest(**raw_req)
 
             filenames = [DocumentType.PAPER_PDF, DocumentType.ANSWER_PDF, DocumentType.PAPER_DOCX]
             files_data = {}
@@ -100,17 +93,21 @@ class PaperService:
                     return {"status": "failed"}
 
             try:
+                allowed_types_serialized = [
+                    t.value if hasattr(t, "value") else str(t) for t in paper_request.allowed_types
+                ]
                 insert_data = {
                     "user_id": user_id,
                     "thread_id": thread_id,
-                    "institution_name": institution_name,
-                    "subject": subject,
-                    "standard": standard,
-                    "difficulty": difficulty,
-                    "chapters": chapters,
-                    "objective_count": objective_count,
-                    "subjective_count": subjective_count,
-                    "allowed_types": allowed_types,
+                    "institution_name": paper_request.institution_name,
+                    "subject": paper_request.subject,
+                    "standard": paper_request.standard,
+                    "difficulty": paper_request.difficulty,
+                    "difficulty_distribution": paper_request.difficulty_distribution.model_dump(),
+                    "chapters": paper_request.chapters,
+                    "objective_count": paper_request.objective_count,
+                    "subjective_count": paper_request.subjective_count,
+                    "allowed_types": allowed_types_serialized,
                     "paper_pdf_path": file_paths[DocumentType.PAPER_PDF],
                     "answer_pdf_path": file_paths[DocumentType.ANSWER_PDF],
                     "paper_docx_path": file_paths[DocumentType.PAPER_DOCX]

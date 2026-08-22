@@ -172,6 +172,7 @@ export const api = {
         subject: string;
         standard: string;
         difficulty: string;
+        difficulty_distribution?: import("./types").DifficultyDistribution;
         chapters: string[];
         objective_count: number;
         subjective_count: number;

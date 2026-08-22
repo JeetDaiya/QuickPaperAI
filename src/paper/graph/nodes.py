@@ -27,6 +27,7 @@ async def question_generator_node(state: ChapterState, config: RunnableConfig) -
     subjective_count = state["subjective_count"]
     allowed_types = state["allowed_types"]
     thread_id = state["thread_id"]
+    difficulty_distribution = state['difficulty_distribution']
 
     configurable: GraphConfig = config.get("configurable", {})
     chunk_repo = configurable.get("chunk_repo")
@@ -46,7 +47,8 @@ async def question_generator_node(state: ChapterState, config: RunnableConfig) -
     quota_instructions = build_quota_instructions(
         objective_count=objective_count,
         subjective_count=subjective_count,
-        allowed_types=allowed_types
+        allowed_types=allowed_types,
+        difficulty_distribution=difficulty_distribution
     )
 
     system_prompt = (
@@ -123,6 +125,7 @@ def router_node(state: PaperState):
     subjective_count = state["paper_request"].subjective_count
     allowed_types = state["paper_request"].allowed_types
     thread_id = state["thread_id"]
+    difficulty_distribution = state['paper_request'].difficulty_distribution
     
     return [
         Send(node="question_generator_node", arg={
@@ -131,7 +134,8 @@ def router_node(state: PaperState):
             "objective_count": objective_count,
             "subjective_count": subjective_count,
             "allowed_types": allowed_types,
-            "thread_id": thread_id
+            "thread_id": thread_id,
+            "difficulty_distribution" : difficulty_distribution
         })
         for chapter in chapter_list
     ]

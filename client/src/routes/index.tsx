@@ -190,8 +190,19 @@ function Home() {
                             <div className="truncate font-serif text-xl">
                               {h.institution_name || h.subject || "Untitled Paper"}
                             </div>
-                            <div className="mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--graphite)]">
-                              {h.subject} · {h.standard}
+                            <div className="mt-1 flex flex-wrap items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--graphite)]">
+                              <span>{h.subject} · {h.standard}</span>
+                              <span className="opacity-40">|</span>
+                              {(() => {
+                                const dist = h.difficulty_distribution || { easy: 20, medium: 50, hard: 30 };
+                                return (
+                                  <span className="inline-flex items-center gap-1.5 rounded-2xs bg-[var(--card)] border border-[var(--paper-rule)] px-2 py-0.5 text-[10px] tracking-normal">
+                                    <span className="text-emerald-700 font-bold">{dist.easy}% E</span>
+                                    <span className="text-[#005FAF] font-bold">{dist.medium}% M</span>
+                                    <span className="text-[#AF101A] font-bold">{dist.hard}% H</span>
+                                  </span>
+                                );
+                              })()}
                             </div>
                           </div>
                           <div className="shrink-0 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--graphite)] opacity-70 group-hover:opacity-100">
@@ -222,7 +233,7 @@ function Home() {
             </p>
             <Link
               to="/login"
-              search={{ redirect: "/" }}
+              search={{ redirect: "/", message: undefined }}
               className="group inline-flex items-center gap-3 rounded-sm bg-[var(--ink)] px-6 py-3 font-mono text-xs uppercase tracking-[0.22em] text-[var(--ink-foreground)] transition hover:bg-[var(--vermillion)] cursor-pointer"
             >
               Sign in to start

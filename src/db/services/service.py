@@ -33,6 +33,7 @@ class DBService:
                     allowed_types=item.get('allowed_types'),
                     objective_count=item.get('objective_count'),
                     difficulty=item.get('difficulty'),
+                    difficulty_distribution=item.get('difficulty_distribution'),
                     subjective_count=item.get('subjective_count'),
                     id=item.get('id'),
                 )

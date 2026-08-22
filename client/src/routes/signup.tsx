@@ -69,7 +69,7 @@ function SignupPage() {
       setTimeout(() => {
         navigate({
           to: "/verify-otp",
-          search: { email },
+          search: { email, purpose: "signup" },
         });
       }, 1000);
     } catch (err: any) {
@@ -185,6 +185,7 @@ function SignupPage() {
               <div className="pt-4 flex items-center justify-between border-t border-[var(--paper-rule)]">
                 <Link
                   to="/login"
+                  search={{ redirect: "/", message: undefined }}
                   className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--graphite)] hover:text-[var(--vermillion)] hover:underline-hand pb-0.5 transition-colors"
                 >
                   Already registered?

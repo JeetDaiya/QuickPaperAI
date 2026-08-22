@@ -1,10 +1,10 @@
-from typing import Literal
-from pydantic import Field, BaseModel
+from typing import Literal, Optional
+from pydantic import Field, BaseModel, model_validator
 
-from src.paper.models import PaperRequest, QuestionTypes, DocumentType
+from src.paper.models import PaperRequest, QuestionTypes, DocumentType, DifficultyDistribution
 
 
-class PaperGenerateRequest(BaseModel):
+class PaperGenerateRequest(BaseModel) :
     institution_name: str
     subject: str
     standard: str
@@ -16,6 +16,7 @@ class PaperGenerateRequest(BaseModel):
         default_factory=lambda: list(QuestionTypes),
         description="List of allowed question types for this paper request."
     )
+    difficulty_distribution : Optional[DifficultyDistribution] = Field(description="Distribution of difficulty.")
 
     def to_domain(self) -> PaperRequest:
         return PaperRequest(
@@ -27,6 +28,7 @@ class PaperGenerateRequest(BaseModel):
             allowed_types=self.allowed_types,
             objective_count=self.objective_count,
             subjective_count=self.subjective_count,
+            difficulty_distribution=self.difficulty_distribution
         )
 
 
@@ -42,6 +44,8 @@ class PaperHistory(BaseModel):
     objective_count: int
     subjective_count: int
     allowed_types: list[str]
+    difficulty_distribution: DifficultyDistribution = Field(default_factory=lambda: DifficultyDistribution(easy=30, medium=50, hard=20))
+
 
     def to_response(self) -> "PaperHistoryResponse":
         return PaperHistoryResponse(
@@ -57,7 +61,8 @@ class PaperHistory(BaseModel):
             paper_pdf=f"/api/download/{self.thread_id}/{DocumentType.PAPER_PDF}",
             paper_docx=f"/api/download/{self.thread_id}/{DocumentType.PAPER_DOCX}",
             answer_pdf=f"/api/download/{self.thread_id}/{DocumentType.ANSWER_PDF}",
-            created_at=self.created_at
+            created_at=self.created_at,
+            difficulty_distribution=self.difficulty_distribution
         )
 
 
@@ -75,3 +80,4 @@ class PaperHistoryResponse(BaseModel):
     paper_pdf: str
     paper_docx: str
     answer_pdf: str
+    difficulty_distribution: Optional[DifficultyDistribution] = None

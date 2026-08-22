@@ -123,13 +123,14 @@ class SupabasePaperRepository(PaperRepository):
                     "subject": row.get("subject"),
                     "standard": row.get("standard"),
                     "difficulty": row.get("difficulty"),
+                    "difficulty_distribution": row.get("difficulty_distribution"),
                     "chapters": row.get("chapters"),
                     "objective_count": row.get("objective_count", 0),
                     "subjective_count": row.get("subjective_count", 0),
                     "allowed_types": row.get("allowed_types", []),
                     "paper_pdf": f"/api/download/{thread_id}/paper.pdf",
                     "paper_docx": f"/api/download/{thread_id}/paper.docx",
-                    "answer_pdf": f"/api/download/{thread_id}/answer.pdf"
+                    "answer_pdf": f"/api/download/{thread_id}/answer.pdf",
                 })
 
             return history_list
