@@ -1,6 +1,9 @@
 from abc import ABC, abstractmethod
 from pydantic import EmailStr
 
+from src.db.records.paper_record import PaperRecord
+
+
 class ChunkRepository(ABC):
     @abstractmethod
     def get_chapter_chunks(self, subject: str, chapter: str) -> list[dict]:
@@ -62,6 +65,21 @@ class PaperRepository(ABC):
     def get_chapters(self):
         pass
 
+    @abstractmethod
+    def create_paper_session(self, paper_record: PaperRecord):
+        pass
+
+    @abstractmethod
+    def update_paper_session(self, thread_id: str, paper_record: PaperRecord):
+        pass
+
+    @abstractmethod
+    def get_paper_session(self, thread_id: str):
+        pass
+
+    @abstractmethod
+    def delete_paper_session(self, thread_id: str):
+        pass
 
 
 

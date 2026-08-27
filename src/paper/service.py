@@ -9,7 +9,7 @@ from langgraph.types import Command
 from peewee import Database
 from starlette.responses import FileResponse
 
-from src.paper.models import DifficultyDistribution
+from src.db.records.paper_record import PaperRecord, Status
 from src.paper.graph.config import GraphConfig
 from src.paper.graph.tracker import ProgressTracker
 from src.db.interfaces.interface import PaperRepository, ChunkRepository, UserRepository
@@ -49,101 +49,84 @@ class PaperService:
         self.notification_service = notification_service
 
     async def save_to_cloud(self, thread_id: str, agent: CompiledStateGraph, user_id: str):
+        config = {"configurable": {"thread_id": thread_id}}
+        snapshot = await agent.aget_state(config)
+
+        if not snapshot.values or not snapshot.values.get("paper_request"):
+            print(f"[ERROR] State or paper_request missing for thread {thread_id}")
+            return {"status": "failed"}
+
+        raw_req = snapshot.values.get("paper_request")
+        paper_request = raw_req if isinstance(raw_req, PaperRequest) else PaperRequest(**raw_req)
+
+        filenames = [DocumentType.PAPER_PDF, DocumentType.ANSWER_PDF, DocumentType.PAPER_DOCX]
+        file_paths = {}
+
         try:
-            config = {"configurable": {"thread_id": thread_id}}
-            snapshot = await agent.aget_state(config)
-
-            if not snapshot.values:
-                print(f"[ERROR] No state found for thread {thread_id}")
-                return {"status": "failed"}
-
-            raw_req = snapshot.values.get("paper_request")
-            if not raw_req:
-                print(f"[ERROR] No paper request found for thread {thread_id}")
-                return {"status": "failed"}
-
-            # Strongly-typed Domain Model Instantiation
-            paper_request = raw_req if isinstance(raw_req, PaperRequest) else PaperRequest(**raw_req)
-
-            filenames = [DocumentType.PAPER_PDF, DocumentType.ANSWER_PDF, DocumentType.PAPER_DOCX]
+            # 1. Read locally compiled paper artifacts
             files_data = {}
+            for filename in filenames:
+                relative_path = f"{thread_id}/{filename}"
+                files_data[filename] = self.local_storage.get_file(file_path=relative_path)
 
-            try:
-                for filename in filenames:
-                    relative_path = f"{thread_id}/{filename}"
-                    files_data[filename] = self.local_storage.get_file(file_path=relative_path)
-            except FileNotFoundError:
-                print(f"[WARN] Compiled files missing locally in outputs/{thread_id}/, aborting upload.")
-                return {"status": "failed"}
-
-            file_paths = {}
+            # 2. Upload compiled artifacts to Cloud Storage
             for filename, file_bytes in files_data.items():
                 storage_path = f"{thread_id}/{filename}"
                 content_type = "application/pdf" if filename.endswith(".pdf") else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                try:
-                    self.cloud_storage.put_file(
-                        file_path=storage_path,
-                        file_data=file_bytes,
-                        content_type=content_type
-                    )
-                    file_paths[filename] = storage_path
-                    print(f"[INFO] Uploaded {filename} to Cloud Storage: {storage_path}")
-                except Exception as upload_err:
-                    print(f"[ERROR] Failed to upload {filename} to cloud: {upload_err}")
-                    return {"status": "failed"}
+                self.cloud_storage.put_file(
+                    file_path=storage_path,
+                    file_data=file_bytes,
+                    content_type=content_type
+                )
+                file_paths[filename] = storage_path
+                print(f"[INFO] Uploaded {filename} to Cloud Storage: {storage_path}")
 
-            try:
-                allowed_types_serialized = [
-                    t.value if hasattr(t, "value") else str(t) for t in paper_request.allowed_types
-                ]
-                insert_data = {
-                    "user_id": user_id,
-                    "thread_id": thread_id,
-                    "institution_name": paper_request.institution_name,
-                    "subject": paper_request.subject,
-                    "standard": paper_request.standard,
-                    "difficulty": paper_request.difficulty,
-                    "difficulty_distribution": paper_request.difficulty_distribution.model_dump(),
-                    "chapters": paper_request.chapters,
-                    "objective_count": paper_request.objective_count,
-                    "subjective_count": paper_request.subjective_count,
-                    "allowed_types": allowed_types_serialized,
-                    "paper_pdf_path": file_paths[DocumentType.PAPER_PDF],
-                    "answer_pdf_path": file_paths[DocumentType.ANSWER_PDF],
-                    "paper_docx_path": file_paths[DocumentType.PAPER_DOCX]
-                }
-                self.paper_repo.upload_paper_metadata(metadata=insert_data)
-                print(f"[INFO] Successfully synced metadata for thread {thread_id} to generated_papers DB table!")
-            except Exception as db_err:
-                print(f"[ERROR] Database insert failed: {db_err}")
-                try:
-                    for filename in filenames:
-                        self.cloud_storage.delete_file(file_path=f"{thread_id}/{filename}")
-                except Exception as e:
-                    raise e
-                return {"status": "failed"}
-
+            # 3. Update database paper session record to SAVED with cloud file paths
+            paper_record = PaperRecord.from_request(
+                thread_id=thread_id,
+                user_id=user_id,
+                paper_request=paper_request,
+                status=Status.SAVED,
+                file_paths=file_paths
+            )
+            self.paper_repo.update_paper_session(thread_id=thread_id, paper_record=paper_record)
+            print(f"[INFO] Successfully synced metadata for thread {thread_id} to generated_papers DB table!")
             return {"status": "success"}
 
         except Exception as e:
-            print(f"[ERROR] Error Uploading completed paper to storage: {e}")
+            print(f"[ERROR] Failed to save paper session to cloud for thread {thread_id}: {e}")
+
+            # Single unified failure state update in DB
+            failed_record = PaperRecord.from_request(
+                thread_id=thread_id,
+                user_id=user_id,
+                paper_request=paper_request,
+                status=Status.FAILED
+            )
+            try:
+                self.paper_repo.update_paper_session(thread_id=thread_id, paper_record=failed_record)
+            except Exception as update_err:
+                print(f"[WARN] Failed to update session status to FAILED in DB: {update_err}")
+
+            # Rollback any uploaded cloud files
+            for storage_path in file_paths.values():
+                try:
+                    self.cloud_storage.delete_file(file_path=storage_path)
+                except Exception:
+                    pass
+
             return {"status": "failed"}
 
     async def download_file(self, thread_id: str, filename: str, preview: bool = False):
         output_dir = f"outputs/{thread_id}"
         local_path = f"{output_dir}/{filename}"
 
-        if filename.endswith(".pdf"):
-            media_type = "application/pdf"
-        elif filename.endswith(".docx"):
-            media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        else:
-            media_type = "application/octet-stream"
+        is_pdf = filename.endswith('.pdf')
+        response_media_type = 'application/pdf' if is_pdf else 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        disposition = 'inline' if (preview and is_pdf) else 'attachment'
+        response_filename = filename if not (preview and is_pdf) else None
 
-        response_filename = None if preview else filename
-        response_media_type = media_type if preview else "application/octet-stream"
-
-        if os.path.exists(local_path):
+        if self.local_storage.exists(file_path=f"{thread_id}/{filename}"):
             return FileResponse(local_path, media_type=response_media_type, filename=response_filename)
 
         print(f"[INFO] Cache miss: Local file outputs/{thread_id}/{filename} not found. Attempting cloud recovery...")
@@ -283,8 +266,16 @@ class PaperService:
 
         return {"status": "uninitialized"}
 
-    async def generate_paper(self, paper_request: PaperRequest, agent: Optional[CompiledStateGraph] = None, user_fcm_token: Optional[str] = None):
+    async def generate_paper(self, paper_request: PaperRequest, user_id: str, user_fcm_token: Optional[str] = None):
         thread_id = str(uuid.uuid4())
+        paper_record = PaperRecord.from_request(
+            thread_id=thread_id,
+            user_id=user_id,
+            paper_request=paper_request,
+            status=Status.GENERATING
+        )
+
+        self.paper_repo.create_paper_session(paper_record=paper_record)
 
         await self.progress_tracker.update_chapters_progress(
             thread_id=thread_id,
@@ -316,36 +307,13 @@ class PaperService:
             }
         }
 
-        snapshot = await agent.aget_state(config)
-        has_interrupt = False
-        if snapshot.tasks:
-            for task in snapshot.tasks:
-                if task.interrupts:
-                    has_interrupt = True
-                    break
+        resume_command = Command(
+            resume={
+                "selected_indices": selected_indices
+            }
+        )
 
-        if not has_interrupt and snapshot.next and any("review" in str(node).lower() for node in snapshot.next):
-            has_interrupt = True
+        print(f"[INFO] Resuming paper generation for thread {thread_id} with selected indices: {selected_indices}")
+        asyncio.create_task(agent.ainvoke(input=resume_command, config=config))
 
-        if not has_interrupt:
-            print(f"[WARN] Cannot resume thread {thread_id}: snapshot.next={snapshot.next}, snapshot.tasks={snapshot.tasks}")
-            raise HTTPException(status_code=400, detail="No active review interrupts found for this thread.")
-
-        async def resume_worker():
-            try:
-                await agent.ainvoke(Command(resume=selected_indices), config)
-            except Exception as e:
-                print(f"[ERROR] LangGraph run crashed on resume thread {thread_id}: {e}")
-                snapshot_err = await agent.aget_state(config)
-                if snapshot_err.values and "paper_request" in snapshot_err.values:
-                    req_obj = snapshot_err.values["paper_request"]
-                    chapters = req_obj.chapters if hasattr(req_obj, "chapters") else req_obj.get("chapters", [])
-                    await self.progress_tracker.update_chapters_progress(
-                        thread_id=thread_id,
-                        chapters=chapters,
-                        status=ChapterStatus.FAILED
-                    )
-
-        asyncio.create_task(resume_worker())
-
-        return {"status": "resuming"}
+        return {"status": "resumed", "thread_id": thread_id}

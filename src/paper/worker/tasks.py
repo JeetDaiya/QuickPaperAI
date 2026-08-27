@@ -89,6 +89,19 @@ async def generate_paper_task(
                     status=ChapterStatus.FAILED
                 )
 
+            paper_repo = ctx.get("paper_repo")
+            if paper_repo:
+                try:
+                    from src.db.records.paper_record import PaperRecord, Status
+                    record = PaperRecord(
+                        thread_id=thread_id,
+                        user_id="",
+                        status=Status.FAILED
+                    )
+                    paper_repo.update_paper_session(thread_id=thread_id, paper_record=record)
+                except Exception as repo_err:
+                    print(f"[WARN] Failed to update paper session status in DB to FAILED: {repo_err}")
+
             # 2. Dispatch FCM Failure Push Notification
             if notification_service and user_fcm_token:
                 await notification_service.send_notification(

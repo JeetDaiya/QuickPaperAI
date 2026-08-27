@@ -230,3 +230,27 @@ async def get_current_user(
         raise e
     except Exception:
         raise credentials_exception
+
+
+def extract_user_id(current_user: dict) -> str:
+    user_id = str(current_user.get("id") or current_user.get("user_id") or "")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User identity missing in session token")
+    return user_id
+
+
+async def verify_thread_ownership(
+    thread_id: str,
+    current_user: dict = Depends(get_current_user),
+    paper_repo: PaperRepository = Depends(get_paper_repository)
+):
+    user_id = extract_user_id(current_user)
+
+    try:
+        session = paper_repo.get_paper_session(thread_id=thread_id)
+        if not session or str(session.user_id) != user_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied. You do not own this paper session.")
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied or paper session not found.")

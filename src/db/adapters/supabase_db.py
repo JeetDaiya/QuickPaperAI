@@ -1,6 +1,10 @@
-from typing import Any
+from typing import Any, Optional
 from pydantic import EmailStr
 from typing_extensions import override
+
+from src.db.records.paper_record import PaperRecord, Status
+from src.db.schemas import PaperHistory
+from src.db.tables import Chunks, User, GeneratedPapers
 from src.db.interfaces.interface import UserRepository, ChunkRepository, PaperRepository
 from supabase import Client, SupabaseException
 
@@ -13,11 +17,11 @@ class SupabaseChunkRepository(ChunkRepository):
     def get_chapter_chunks(self, subject: str, chapter: str) -> list[dict]:
         try:
             response = (
-                self.db.table("chunks")
+                self.db.table(Chunks.TABLE)
                 .select("*")
-                .eq("chapter_name", chapter)
-                .eq("subject", subject)
-                .order("chunk_index")
+                .eq(Chunks.CHAPTER_NAME, chapter)
+                .eq(Chunks.SUBJECT, subject)
+                .order(Chunks.CHUNK_INDEX)
                 .execute()
             )
             return response.data
@@ -31,7 +35,7 @@ class SupabaseUserRepository(UserRepository):
 
     def get_user(self, email: EmailStr):
         try:
-            data = self.db.table("users").select("*").eq("email", email).execute()
+            data = self.db.table(User.TABLE).select("*").eq(User.EMAIL, email).execute()
             return data.data[0] if data.data else None
         except Exception as e:
             raise e
@@ -39,33 +43,33 @@ class SupabaseUserRepository(UserRepository):
     def create_user(self, email: EmailStr, hashed_password: str, name: str):
         try:
             user_data = {
-                "email": email,
-                "hashed_password": hashed_password,
-                "name": name,
-                "is_active": False
+                User.EMAIL: email,
+                User.HASHED_PASSWORD: hashed_password,
+                User.NAME: name,
+                User.IS_ACTIVE: False
             }
-            response = self.db.table("users").insert(user_data).execute()
+            response = self.db.table(User.TABLE).insert(user_data).execute()
             return response.data[0] if response.data else None
         except SupabaseException as e:
             raise e
 
     def update_user_password(self, email: EmailStr, new_hashed_password: str):
         try:
-            response = self.db.table("users").update({"hashed_password": new_hashed_password}).eq("email", email).execute()
+            response = self.db.table(User.TABLE).update({User.HASHED_PASSWORD: new_hashed_password}).eq(User.EMAIL, email).execute()
             return response.data[0] if response.data else None
         except SupabaseException as e:
             raise e
 
     def activate_user(self, email: EmailStr):
         try:
-            response = self.db.table("users").update({"is_active": True}).eq("email", email).execute()
+            response = self.db.table(User.TABLE).update({User.IS_ACTIVE: True}).eq(User.EMAIL, email).execute()
             return response.data[0] if response.data else None
         except SupabaseException as e:
             raise e
 
     def save_fcm_token(self, user_id: str, token: str):
         try:
-            self.db.table("users").update({"fcm_token": token}).eq("id", user_id.strip()).execute()
+            self.db.table(User.TABLE).update({User.FCM_TOKEN: token}).eq(User.USER_ID, user_id.strip()).execute()
             print(f"[INFO] FCM Token successfully saved to database for user {user_id}")
             return True
         except Exception as e:
@@ -74,7 +78,7 @@ class SupabaseUserRepository(UserRepository):
 
     def update_notification_perms(self, user_id: str, notifications_enabled: bool):
         try:
-            self.db.table("users").update({"notifications_enabled": notifications_enabled}).eq("id", user_id.strip()).execute()
+            self.db.table(User.TABLE).update({User.NOTIFICATIONS_ENABLED: notifications_enabled}).eq(User.USER_ID, user_id.strip()).execute()
             print(f"[INFO] Notification perms ({notifications_enabled}) saved to database for user {user_id}")
             return True
         except Exception as e:
@@ -83,7 +87,7 @@ class SupabaseUserRepository(UserRepository):
 
     def get_notification_perms(self, user_id: str):
         try:
-            response = self.db.table("users").select("notifications_enabled").eq("id", user_id.strip()).execute()
+            response = self.db.table(User.TABLE).select(User.NOTIFICATIONS_ENABLED).eq(User.USER_ID, user_id.strip()).execute()
             return response.data
         except Exception as e:
             print(f"[ERROR] Failed to fetch notification perms from database: {e}")
@@ -91,7 +95,7 @@ class SupabaseUserRepository(UserRepository):
 
     def get_fcm_token(self, user_id: str):
         try:
-            response = self.db.table("users").select("fcm_token").eq("id", user_id.strip()).execute()
+            response = self.db.table(User.TABLE).select(User.FCM_TOKEN).eq(User.USER_ID, user_id.strip()).execute()
             return response.data
         except Exception as e:
             print(f"[ERROR] Failed to fetch FCM token from database: {e}")
@@ -102,36 +106,18 @@ class SupabasePaperRepository(PaperRepository):
     def __init__(self, client: Client) -> None:
         self.db = client
 
-    def get_user_paper_history(self, user_id: str) -> list[dict]:
+    def get_user_paper_history(self, user_id: str) -> list[PaperHistory]:
         try:
             response = (
-                self.db.table("generated_papers")
+                self.db.table(GeneratedPapers.TABLE)
                 .select("*")
-                .eq("user_id", user_id)
-                .order("created_at", desc=True)
+                .eq(GeneratedPapers.USER_ID, user_id)
+                .eq(GeneratedPapers.STATUS, Status.SAVED)
+                .order(GeneratedPapers.CREATED_AT, desc=True)
                 .execute()
             )
 
-            history_list: list[dict] = []
-            for row in response.data:
-                thread_id = row.get("thread_id")
-                history_list.append({
-                    "id": row.get("id"),
-                    "thread_id": thread_id,
-                    "created_at": row.get("created_at"),
-                    "institution_name": row.get("institution_name"),
-                    "subject": row.get("subject"),
-                    "standard": row.get("standard"),
-                    "difficulty": row.get("difficulty"),
-                    "difficulty_distribution": row.get("difficulty_distribution"),
-                    "chapters": row.get("chapters"),
-                    "objective_count": row.get("objective_count", 0),
-                    "subjective_count": row.get("subjective_count", 0),
-                    "allowed_types": row.get("allowed_types", []),
-                    "paper_pdf": f"/api/download/{thread_id}/paper.pdf",
-                    "paper_docx": f"/api/download/{thread_id}/paper.docx",
-                    "answer_pdf": f"/api/download/{thread_id}/answer.pdf",
-                })
+            history_list: list[PaperHistory] = [PaperHistory(**row) for row in response.data]
 
             return history_list
 
@@ -141,8 +127,8 @@ class SupabasePaperRepository(PaperRepository):
     def get_chapters(self) -> list[Any]:
         try:
             data = (
-                self.db.table("chunks")
-                .select("chapter_name", "subject", "standard")
+                self.db.table(Chunks.TABLE)
+                .select(Chunks.CHAPTER_NAME, Chunks.SUBJECT, Chunks.STANDARD)
                 .execute()
             )
             return data.data
@@ -151,19 +137,45 @@ class SupabasePaperRepository(PaperRepository):
 
     def upload_paper_metadata(self, metadata: dict):
         try:
-            self.db.table("generated_papers").insert(metadata).execute()
+            self.db.table(GeneratedPapers.TABLE).insert(metadata).execute()
         except Exception as e:
             raise e
 
     def get_paper_metadata(self, thread_id: str, paper_name: str):
         try:
-            response = self.db.table("generated_papers").select(paper_name).eq("thread_id", thread_id).execute()
+            response = self.db.table(GeneratedPapers.TABLE).select(paper_name).eq(GeneratedPapers.THREAD_ID, thread_id).execute()
             return response
         except Exception as e:
             raise e
 
     def delete_paper_metadata(self, thread_id: str):
         try:
-            self.db.table("generated_papers").delete().eq("thread_id", thread_id).execute()
+            self.db.table(GeneratedPapers.TABLE).delete().eq(GeneratedPapers.THREAD_ID, thread_id).execute()
         except Exception as e:
             raise e
+
+    def create_paper_session(self, paper_record : PaperRecord):
+        try:
+            self.db.table(GeneratedPapers.TABLE).insert(paper_record.to_insert()).execute()
+        except Exception as e:
+            raise e
+
+    def update_paper_session(self, thread_id: str, paper_record : PaperRecord):
+        try:
+            self.db.table(GeneratedPapers.TABLE).update(paper_record.to_update()).eq(GeneratedPapers.THREAD_ID, thread_id).execute()
+        except Exception as e:
+            raise e
+
+    def get_paper_session(self, thread_id: str) -> Optional[PaperRecord]:
+        try:
+            response = self.db.table(GeneratedPapers.TABLE).select("*").eq(GeneratedPapers.THREAD_ID, thread_id).execute()
+            return PaperRecord(**response.data[0]) if response.data else None
+        except Exception as e:
+            raise e
+
+    def delete_paper_session(self, thread_id: str):
+        try:
+            self.db.table(GeneratedPapers.TABLE).delete().eq(GeneratedPapers.THREAD_ID, thread_id).execute()
+        except Exception as e:
+            raise e
+
