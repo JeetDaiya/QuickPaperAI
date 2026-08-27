@@ -148,6 +148,9 @@ def review_node(state: PaperState):
         "questions": [question.model_dump() for question in state["all_questions"]]
     })
     
+    if isinstance(selected_questions_indices, dict):
+        selected_questions_indices = selected_questions_indices.get("selected_indices", [])
+
     if not selected_questions_indices:
         raise ValueError("No questions selected. Please select at least one question.")
     

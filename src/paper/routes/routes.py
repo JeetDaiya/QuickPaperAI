@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
 from src.paper.schemas import PaperGenerateRequest
-from src.dependencies import get_current_user, get_paper_service
+from src.dependencies import get_current_user, get_paper_service, verify_thread_ownership, extract_user_id
 from src.paper.service import PaperService
 
 paper_router = APIRouter(prefix='/api')
@@ -27,7 +27,12 @@ async def generate_paper(
     agent = req.app.state.agent
     fcm_token = current_user.get('fcm_token') if current_user.get("notifications_enabled", True) else None
     print(f"[DEBUG] POST /generate user: {current_user.get('email')}, fcm_token: {fcm_token}")
-    return await paper_service.generate_paper(agent=agent, paper_request=paper_request.to_domain(), user_fcm_token=fcm_token)
+    user_id = extract_user_id(current_user)
+    return await paper_service.generate_paper(
+        paper_request=paper_request.to_domain(),
+        user_id=user_id,
+        user_fcm_token=fcm_token
+    )
 
 
 @paper_router.post('/resume/{thread_id}')
@@ -36,6 +41,7 @@ async def resume_generation(
     payload: ResumeRequest,
     req: Request,
     current_user: dict = Depends(get_current_user),
+    _: None = Depends(verify_thread_ownership),
     paper_service: PaperService = Depends(get_paper_service)
 ):
     agent = req.app.state.agent
@@ -51,15 +57,17 @@ async def stream_generation_status(
     thread_id: str,
     req: Request,
     current_user: dict = Depends(get_current_user),
+    _: None = Depends(verify_thread_ownership),
     paper_service: PaperService = Depends(get_paper_service)
 ):
+    user_id = extract_user_id(current_user)
     async def generator():
         last_state = None
 
         while True:
             if await req.is_disconnected():
                 break
-            status_data = await paper_service.get_generation_status(thread_id=thread_id, agent=req.app.state.agent, user_id=str(current_user.get('user_id', "")))
+            status_data = await paper_service.get_generation_status(thread_id=thread_id, agent=req.app.state.agent, user_id=user_id)
 
             current_state = json.dumps(status_data)
 
@@ -88,6 +96,7 @@ async def download_file(
     filename: str,
     preview: bool = False,
     current_user: dict = Depends(get_current_user),
+    _: None = Depends(verify_thread_ownership),
     paper_service: PaperService = Depends(get_paper_service)
 ):
     return await paper_service.download_file(thread_id=thread_id, filename=filename, preview=preview)
@@ -98,9 +107,10 @@ async def save_to_cloud(
     thread_id: str,
     req: Request,
     current_user: dict = Depends(get_current_user),
+    _: None = Depends(verify_thread_ownership),
     paper_service: PaperService = Depends(get_paper_service)
 ):
-    user_id = str(current_user["id"])
+    user_id = extract_user_id(current_user)
     agent = req.app.state.agent
     return await paper_service.save_to_cloud(thread_id=thread_id, agent=agent, user_id=user_id)
 
@@ -110,6 +120,7 @@ async def cancel_generation(
     thread_id: str,
     req: Request,
     current_user: dict = Depends(get_current_user),
+    _: None = Depends(verify_thread_ownership),
     paper_service: PaperService = Depends(get_paper_service)
 ):
     db_pool: Database = req.app.state.db_pool

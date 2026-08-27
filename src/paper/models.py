@@ -87,7 +87,7 @@ class PaperRequest(BaseModel):
         default_factory=lambda: list(QuestionTypes),
         description="List of allowed question types for this paper request."
     )
-    difficulty_distribution : DifficultyDistribution = Field(default_factory= lambda: DifficultyDistribution(easy=30 , medium=50, hard=20))
+    difficulty_distribution : Optional[DifficultyDistribution] = Field(default_factory= lambda: DifficultyDistribution(easy=30 , medium=50, hard=20))
 
     @model_validator(mode="after")
     def validate_counts_and_types(self) -> "PaperRequest":

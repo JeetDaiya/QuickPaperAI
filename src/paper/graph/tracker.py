@@ -21,7 +21,7 @@ class ProgressTracker:
     def _get_cancel_key(self, thread_id: str) -> str:
         return f"cancel:{thread_id}"
 
-    def _get_chanel_key(self, thread_id: str) -> str:
+    def _get_channel_key(self, thread_id: str) -> str:
         return f"channel:progress:{thread_id}"
 
     async def update_chapters_progress(
@@ -57,7 +57,7 @@ class ProgressTracker:
             await self.redis_client.hset(key=key, field=chapter, value=json.dumps(payload))
             await self.redis_client.expire(key=key, seconds=self.ttl)
 
-            channel = self._get_chanel_key(thread_id=thread_id)
+            channel = self._get_channel_key(thread_id=thread_id)
             await self.redis_client.publish(channel=channel, message=json.dumps(payload))
 
 

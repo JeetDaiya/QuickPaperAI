@@ -1,16 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from src.db.interfaces.interface import PaperRepository
 
-
-from src.dependencies import get_current_user, get_paper_repository, get_db_service
-from src.paper.schemas import PaperHistoryResponse
+from src.dependencies import get_current_user, get_db_service
 from src.db.services.service import DBService
 
 db_router = APIRouter(prefix="/api/db")
 
 @db_router.get("/get-chapters")
-async def get_chapters(paper_repo : PaperRepository = Depends(get_paper_repository), db_service : DBService = Depends(get_db_service)):
+async def get_chapters(db_service : DBService = Depends(get_db_service)):
     try:
         chapter_data = await db_service.get_chapters()
         return{
@@ -20,14 +17,11 @@ async def get_chapters(paper_repo : PaperRepository = Depends(get_paper_reposito
         raise HTTPException(status_code=500, detail='Failed to load chapters. Please try again')
 
 @db_router.get("/history")
-async def get_history(current_user : dict = Depends(get_current_user), paper_repo : PaperRepository = Depends(get_paper_repository), db_service : DBService = Depends(get_db_service)):
+async def get_history(current_user : dict = Depends(get_current_user),  db_service : DBService = Depends(get_db_service)):
     try:
         user_id = str(current_user["id"])
         history_list = await db_service.get_history(user_id=user_id)
-        history_list_response : list[PaperHistoryResponse] = [
-            history.to_response() for history in history_list
-        ]
-        return {"history": history_list_response}
+        return {"history": history_list}
     except Exception as e:
         raise HTTPException(status_code=500, detail='Failed to load history. Please try again')
         
