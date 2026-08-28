@@ -23,7 +23,6 @@ RUN apt-get update && playwright install --with-deps chromium && rm -rf /var/lib
 
 # Copy the rest of the application code
 COPY src/ /app/src/
-COPY data/ /app/data/
 
 # Create output directory for caching generated papers
 RUN mkdir -p /app/outputs
