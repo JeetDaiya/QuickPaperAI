@@ -16,3 +16,10 @@ agent doesn't mistake "there's a TODO for this" for "this is expected to exist."
 - **Fully decouple `DocumentCompiler` at the graph-runner level**: currently injected via
   `GraphConfig`, but `pdf_node` still knows a bit too much about compilation specifics; push
   that down into `src/paper/compilers/adapters/`.
+- **Exception handling refactor in `SupabaseDatabase` adapters** (`src/db/adapters/supabase_db.py`):
+  several methods (`get_fcm_token`, `get_notification_perms`, `update_notification_perms`,
+  `save_fcm_token`, etc.) catch `Exception`, `print()` it, and return `False`/empty data instead
+  of raising — routes then return `200 OK` with silently missing data. Caught in production when
+  a wrong column name (`user_id` vs `id`) went unnoticed until logs were checked manually; a
+  proper error contract would have surfaced it immediately. Same underlying issue as the "REST
+  error contract migration" item above — worth doing together.
