@@ -34,3 +34,4 @@ upstash-redis
 starlette
 peewee
 arq
+firebase-admin==7.5.0
