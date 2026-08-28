@@ -4,6 +4,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    volumes:
+      - ./firebase-credentials.json:/app/firebase-credentials.json:ro
     expose:
       - "8000"
     networks:
@@ -15,6 +17,8 @@ services:
     command: arq src.paper.worker.settings.WorkerSettings
     env_file:
       - .env
+    volumes:
+      - ./firebase-credentials.json:/app/firebase-credentials.json:ro
     networks:
       - webnet
 
