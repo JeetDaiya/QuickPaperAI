@@ -1,0 +1,39 @@
+services:
+  app:
+    image: ghcr.io/jeetdaiya/quickpaperai:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    expose:
+      - "8000"
+    networks:
+      - webnet
+
+  worker:
+    image: ghcr.io/jeetdaiya/quickpaperai:latest
+    restart: unless-stopped
+    command: arq src.paper.worker.settings.WorkerSettings
+    env_file:
+      - .env
+    networks:
+      - webnet
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - webnet
+
+networks:
+  webnet:
+
+volumes:
+  caddy_data:
+  caddy_config:
