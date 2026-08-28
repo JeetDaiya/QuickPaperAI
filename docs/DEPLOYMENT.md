@@ -10,18 +10,23 @@ Living document — reflects current deploy targets only. Update in place when s
   doesn't match Vercel's Build Output API v3 layout, don't remove these overrides.
 
 ## Backend
-- **Currently**: Railway — `https://quickpaperai-production.up.railway.app/`.
-  Auto-builds root `Dockerfile` on push to `main`. Binds to Railway's `$PORT`.
-  Uvicorn started with `--timeout-keep-alive 120` (generation can run past a minute; avoids
-  socket drops on Railway's proxy). Playwright `wait_for_load_state` timeout set to 90s for the
-  same reason.
-- **In progress**: migrating backend hosting to Oracle Cloud (OCI) Always Free tier
-  (Ampere A1, 2 OCPU / 12GB — Oracle halved this from 4/24 in June 2026, budget for the current
-  smaller allowance). Target CI/CD: GitHub Actions builds on push to `main` → pushes image to
-  GitHub Container Registry (`ghcr.io`) → SSH deploy step on the same workflow runs
-  `docker compose pull && docker compose up -d` on the OCI VM → Caddy reverse-proxies to the
-  app container by service name so no proxy reconfig is needed on redeploy. Not yet live —
-  Railway is still the deployed backend until this is cut over.
+- **Currently**: Oracle Cloud (OCI) Always Free tier — `https://80-225-247-83.sslip.io/`
+  (Ampere A1, Ubuntu 24.04, 2 OCPU / 12GB RAM, 4GB swap). sslip.io is a wildcard-DNS service
+  that resolves `<ip-with-dashes>.sslip.io` to that IP with zero registration — swap to a real
+  domain later by changing the `Caddyfile` site block and `VITE_API_BASE_URL`, nothing else.
+  CI/CD: `.github/workflows/deploy.yml` — on push to `main`, GitHub Actions builds an
+  `linux/arm64` image (QEMU + Buildx, since hosted runners are amd64 and the VM is ARM) →
+  pushes to GitHub Container Registry (`ghcr.io/jeetdaiya/quickpaperai`) → copies
+  `docker-compose.yml`/`Caddyfile` to the VM via `scp` → `docker compose pull && up -d` over
+  SSH. Caddy reverse-proxies to the `app` container by service name and auto-provisions/renews
+  the Let's Encrypt cert — no manual TLS handling.
+  `.env` and `firebase-credentials.json` are gitignored and live only on the VM
+  (`~/app/`, `chmod 600`), bind-mounted into the `app`/`worker` containers via
+  `docker-compose.yml` — never pushed through git or CI.
+- **Previously**: Railway — `https://quickpaperai-production.up.railway.app/`. Kept warm as a
+  fallback for now; decommission once OCI has proven stable under real usage.
+  Uvicorn was started with `--timeout-keep-alive 120` there (generation can run past a minute;
+  avoids socket drops on Railway's proxy) — same flag carried over to the OCI Dockerfile CMD.
 
 ## Worker
 - ARQ worker: `arq src.paper.worker.settings.WorkerSettings`
