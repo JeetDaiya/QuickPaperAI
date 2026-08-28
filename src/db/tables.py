@@ -36,5 +36,5 @@ class User:
     IS_ACTIVE = "is_active"
     HASHED_PASSWORD = "hashed_password"
     EMAIL = "email"
-    USER_ID = "user_id"
+    USER_ID = "id"
     NAME = "name"
