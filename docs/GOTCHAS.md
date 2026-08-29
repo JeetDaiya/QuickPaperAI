@@ -18,8 +18,10 @@ If you hit something new and non-obvious, add a line here — don't bury it in a
 - `bcrypt` must stay pinned to `3.2.2` with `passlib` — `bcrypt>=5.0.0` breaks
   `pwd_context.verify()` with a misleading `password cannot be longer than 72 bytes` error even
   on short passwords. If a dependency bump touches bcrypt, check this first.
-- Reset-password OTP and signup OTP are namespaced by `purpose` — don't let a code issued for
-  one purpose verify for the other.
+- Reset-password OTP and signup OTP are namespaced by `purpose` in the Redis key
+  (`otp:{purpose}:{email}`, and likewise for cooldown/attempts/lockout keys) — a code issued
+  for one purpose cannot verify the other. OTPs are stored SHA-256-hashed and compared with
+  `hmac.compare_digest`; every OTP-store call must pass `purpose`.
 
 ## Async / infra
 - Playwright: must use `async_playwright` / `async_api`, never the sync API — sync calls inside

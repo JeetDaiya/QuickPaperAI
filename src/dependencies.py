@@ -92,7 +92,7 @@ def get_authentication_service(user_repo: UserRepository = Depends(get_user_repo
         algorithm=settings.ALGORITHM,
         secret_key=settings.SECRET_KEY,
         user_repo=user_repo,
-        token_expire_minutes=10080
+        token_expire_minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
 
 

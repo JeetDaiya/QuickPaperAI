@@ -12,7 +12,7 @@ class AuthService(ABC):
         pass
 
     @abstractmethod
-    async def verify_session(self, token: str) -> dict:
+    async def verify_session(self, token: str, expected_type: str = "access") -> dict:
         pass
 
     @abstractmethod
@@ -20,7 +20,7 @@ class AuthService(ABC):
         pass
 
     @abstractmethod
-    def create_token_for_email(self, email: str) -> dict:
+    def create_token_for_email(self, email: str, token_type: str = "access", expires_minutes: Optional[int] = None) -> dict:
         pass
 
     @abstractmethod
