@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from src.dependencies import lifespan
 from fastapi.middleware.cors import CORSMiddleware
+from src.base_settings import settings
 from src.paper.routes.routes import paper_router
 from src.db.routes.routes import db_router
 from src.auth.routes.routes import auth_routes
@@ -8,7 +9,8 @@ from src.auth.routes.routes import auth_routes
 
 app = FastAPI(title="QuickPaper AI", lifespan=lifespan)
 
-origins = [
+# Localhost dev origins are always allowed; production origins come from settings.
+dev_origins = [
     "http://localhost:5173",
     "http://localhost:8080",
     "http://localhost:3000",
@@ -19,10 +21,12 @@ origins = [
     "http://127.0.0.1:8000",
 ]
 
+prod_origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
+origins = dev_origins + prod_origins
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=".*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

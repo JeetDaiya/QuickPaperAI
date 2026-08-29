@@ -66,16 +66,16 @@ async def send_verification_email(
         if user and not user.get("is_active", False):
             raise HTTPException(status_code=400, detail="User is not verified, please verify your account first")
 
-    if await otp_store.set_send_cooldown(email=email):
+    if await otp_store.set_send_cooldown(email=email, purpose=purpose.value):
         raise HTTPException(status_code=429, detail="Please wait 60 seconds before request another code")
 
     try:
         otp_code = generate_otp()
-        await otp_store.save_otp(email=email, otp_code=otp_code)
+        await otp_store.save_otp(email=email, otp_code=otp_code, purpose=purpose.value)
         await send_email(email=email, otp_code=otp_code, email_service=email_service)
         return {"message": "OTP sent successfully. Please check your email."}
     except Exception as e:
-        await otp_store.delete_otp(email=email)
+        await otp_store.delete_otp(email=email, purpose=purpose.value)
         raise HTTPException(status_code=500, detail="Failed to send email.")
 
 
@@ -88,21 +88,21 @@ async def verify_otp(
     email = data.email.lower().strip()
     purpose = data.purpose
 
-    if await otp_store.is_locked_out(email=email):
+    if await otp_store.is_locked_out(email=email, purpose=purpose.value):
         raise HTTPException(status_code=403, detail="Too many failed verification, Please try again after 15 minutes.")
 
-    stored_otp = await otp_store.get_otp(email=email)
+    stored_otp = await otp_store.get_otp(email=email, purpose=purpose.value)
     if not stored_otp:
         raise HTTPException(status_code=400, detail="OTP not found or expired. Please request a new code.")
 
-    if stored_otp != data.otp:
-        is_now_locked = await otp_store.increment_failed_attempts(email=email)
+    if not otp_store.verify_otp(data.otp, stored_otp):
+        is_now_locked = await otp_store.increment_failed_attempts(email=email, purpose=purpose.value)
         if is_now_locked:
             raise HTTPException(status_code=403, detail="Too many verification attempts. Your verification code is locked for 15 minutes.")
         else:
             raise HTTPException(status_code=400, detail="Invalid OTP.")
 
-    await otp_store.delete_otp(email=email)
+    await otp_store.delete_otp(email=email, purpose=purpose.value)
 
     if purpose == OTPPurpose.SIGNUP:
         await auth_service.activate_user(email=email)
@@ -113,7 +113,7 @@ async def verify_otp(
             "token_type": token_data["token_type"]
         }
     elif purpose == OTPPurpose.RESET_PASSWORD:
-        reset_token = auth_service.create_token_for_email(email=email)
+        reset_token = auth_service.create_token_for_email(email=email, token_type="reset", expires_minutes=15)
         return {
             "message": "OTP verified successfully. You can now reset your password.",
             "reset_token": reset_token["access_token"],
@@ -128,7 +128,7 @@ async def reset_password(
     auth_service: AuthService = Depends(get_authentication_service)
 ):
     try:
-        user = await auth_service.verify_session(data.token)
+        user = await auth_service.verify_session(data.token, expected_type="reset")
     except HTTPException as e:
         raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
     

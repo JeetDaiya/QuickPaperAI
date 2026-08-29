@@ -51,6 +51,10 @@ class Settings(BaseSettings):
 
     FRONTEND_URL: str = "http://localhost:8080"
 
+    # Comma-separated list of production browser origins allowed by CORS (localhost dev
+    # origins are always added in app.py). Set in .env on the deployed backend.
+    ALLOWED_ORIGINS: str = "https://quick-paper-ai-ruddy.vercel.app"
+
 
 
 settings = Settings()
