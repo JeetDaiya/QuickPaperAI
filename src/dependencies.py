@@ -175,8 +175,9 @@ async def lifespan(app: FastAPI):
     global compiled_agent
     pool = AsyncConnectionPool(
         conninfo=settings.DB_URI,
-        max_size=20,
+        max_size=5,
         open=False,
+        check=AsyncConnectionPool.check_connection,
         kwargs={
             "autocommit": True,
             "row_factory": dict_row,

@@ -1,4 +1,3 @@
-from typing import Optional
 from psycopg_pool import AsyncConnectionPool
 from psycopg.rows import dict_row
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
@@ -38,8 +37,9 @@ class WorkerSettings:
         print("[INFO] Starting ARQ Worker & initializing services...")
         pool = AsyncConnectionPool(
             conninfo=settings.DB_URI,
-            max_size=20,
+            max_size=10,
             open=False,
+            check=AsyncConnectionPool.check_connection,
             kwargs={
                 "autocommit": True,
                 "row_factory": dict_row,
