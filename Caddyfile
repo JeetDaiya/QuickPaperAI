@@ -8,3 +8,6 @@
         format json
     }
 }
+
+# Additional sites (not managed by this repo) live in ./sites/*.Caddyfile on the VM.
+import sites/*.Caddyfile
