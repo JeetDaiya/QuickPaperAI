@@ -97,8 +97,8 @@ function VerifyOtpPage() {
     if (!otp || otp.length < 6) {
       return setError("Please enter the complete 6-digit verification code.");
     }
-    if (isResetMode && (!newPassword || newPassword.length < 6)) {
-      return setError("New password must be at least 6 characters.");
+    if (isResetMode && (!newPassword || newPassword.length < 8)) {
+      return setError("New password must be at least 8 characters.");
     }
 
     setSubmitting(true);
