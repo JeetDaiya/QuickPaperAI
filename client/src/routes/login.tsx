@@ -125,12 +125,7 @@ function LoginPage() {
       });
     } catch (err: any) {
       const msg = err.message || "";
-      if (msg.toLowerCase().includes("not found") || msg.includes("404")) {
-        setError("No account found with this email address. Please check your spelling or create an account.");
-      } else if (msg.toLowerCase().includes("not verified")) {
-        setIsUnverified(true);
-        setError("This account is not verified yet. Please verify your email address first.");
-      } else if (msg.toLowerCase().includes("60 seconds") || msg.includes("429")) {
+      if (msg.toLowerCase().includes("60 seconds") || msg.includes("429")) {
         setError("Please wait 60 seconds before requesting another reset code.");
       } else {
         setError(msg || "Failed to send reset code. Please try again.");
