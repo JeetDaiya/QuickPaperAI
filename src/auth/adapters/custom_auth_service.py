@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import hashlib
+import uuid
 from typing import Optional, Tuple
 
 from fastapi import HTTPException
@@ -49,8 +50,15 @@ class CustomAuthService(AuthService):
         to_encode = data.copy()
 
         minutes = expires_minutes if expires_minutes is not None else self.token_expire_minutes
-        expire = datetime.now(timezone.utc) + timedelta(minutes=minutes)
-        to_encode.update({"exp": expire, "type": token_type})
+        now = datetime.now(timezone.utc)
+        expire = now + timedelta(minutes=minutes)
+        to_encode.update({
+            "exp": expire,
+            "type": token_type,
+            "iat": now,
+            "nbf": now,
+            "jti": uuid.uuid4().hex,
+        })
 
         encoded_jwt = jwt.encode(to_encode, key=self.secret_key, algorithm=self.algorithm)
 

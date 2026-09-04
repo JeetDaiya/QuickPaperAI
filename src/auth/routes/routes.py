@@ -50,30 +50,30 @@ async def send_verification_email(
     otp_store: OTPStore = Depends(get_otp_store), 
     auth_service: AuthService = Depends(get_authentication_service)
 ):
+    GENERIC_MSG = "If an account matches this email, a verification code has been sent. Please check your email."
+
     email = email_req.email.lower().strip()
     purpose = email_req.purpose
     user = await auth_service.get_user(email=email)
 
-    if purpose == OTPPurpose.SIGNUP:
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found, please register first")
-        if user.get("is_active", False):
-            raise HTTPException(status_code=400, detail="User already verified, please log in again")
-
-    elif purpose == OTPPurpose.RESET_PASSWORD:
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found, please register first")
-        if user and not user.get("is_active", False):
-            raise HTTPException(status_code=400, detail="User is not verified, please verify your account first")
-
     if await otp_store.set_send_cooldown(email=email, purpose=purpose.value):
         raise HTTPException(status_code=429, detail="Please wait 60 seconds before request another code")
+
+    if purpose == OTPPurpose.SIGNUP:
+        eligible = bool(user) and not user.get("is_active", False)
+    elif purpose == OTPPurpose.RESET_PASSWORD:
+        eligible = bool(user) and user.get("is_active", False)
+    else:
+        eligible = False
+
+    if not eligible:
+        return {"message": GENERIC_MSG}
 
     try:
         otp_code = generate_otp()
         await otp_store.save_otp(email=email, otp_code=otp_code, purpose=purpose.value)
         await send_email(email=email, otp_code=otp_code, email_service=email_service)
-        return {"message": "OTP sent successfully. Please check your email."}
+        return {"message": GENERIC_MSG}
     except Exception as e:
         await otp_store.delete_otp(email=email, purpose=purpose.value)
         raise HTTPException(status_code=500, detail="Failed to send email.")

@@ -1,4 +1,5 @@
 from typing import Optional
+from pydantic import field_validator
 from pydantic_settings import  BaseSettings, SettingsConfigDict
 
 model_config = SettingsConfigDict(
@@ -12,7 +13,7 @@ class Settings(BaseSettings):
     app_name: str = "Quick Paper AI"
 
     # Security
-    SECRET_KEY: str = None
+    SECRET_KEY: str = ""
     ALGORITHM : str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES : int = 60 * 24 * 7
 
@@ -55,6 +56,12 @@ class Settings(BaseSettings):
     # origins are always added in app.py). Set in .env on the deployed backend.
     ALLOWED_ORIGINS: str = "https://quick-paper-ai-ruddy.vercel.app"
 
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def _validate_secret_key(cls, v):
+        if not v or len(v) < 32:
+            raise ValueError("SECRET_KEY must be set and at least 32 characters")
+        return v
 
 
 settings = Settings()
