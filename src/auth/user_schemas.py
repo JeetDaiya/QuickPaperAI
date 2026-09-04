@@ -1,12 +1,12 @@
 from datetime import datetime
 from uuid import UUID
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, Field
 from enum import Enum
 
 
 class UserRegister(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(..., min_length=8, max_length=128)
     name: str
 
 
@@ -44,7 +44,7 @@ class OTPVerification(BaseModel):
 class ResetPasswordRequest(BaseModel):
     email: EmailStr
     token: str
-    new_password: str
+    new_password: str = Field(..., min_length=8, max_length=128)
 
 
 class FCMTokenRequest(BaseModel):
