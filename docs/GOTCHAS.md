@@ -34,9 +34,16 @@ If you hit something new and non-obvious, add a line here — don't bury it in a
   explicitly registered in the `JsonPlusSerializer` allow-list in **both** `src/dependencies.py`
   and `src/paper/worker/settings.py` — they must stay identical. Missing types cause silent
   deserialization failures on resume.
-- ARQ retry backoff: `generate_paper_task` uses `arq.jobs.Retry(defer=current_try * 30)` for
-  linear backoff on transient failures — don't replace with a bare `raise` or retries fire
+- ARQ retry backoff: `generate_paper_task` uses `Retry(defer=current_try * 30)` (import `Retry`
+  from `arq`, not `arq.jobs` — it's defined in `arq/worker.py` and re-exported at the top level)
+  for linear backoff on transient failures — don't replace with a bare `raise` or retries fire
   immediately.
+- The `app` and `worker` containers both write/read `outputs/{thread_id}/...` (PDF/DOCX local
+  cache) and must share the `paper_outputs` Docker volume (`docker-compose.yml`) — `pdf_node`
+  runs wherever the graph resumes (the ARQ worker, since resume always happens there), and
+  `get_generation_status`/`download_file`/`save_to_cloud` run in the `app` container. Without
+  the shared volume, the app container never sees the compiled files and generation appears to
+  hang forever even though the worker finished successfully.
 
 ## Frontend
 - `VITE_API_BASE_URL` needs an explicit `http(s)://` prefix or the browser treats API calls as
