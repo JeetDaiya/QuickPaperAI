@@ -17,7 +17,7 @@ from src.dependencies import (
     get_user_repository,
 )
 from src.paper.graph.builder import graph
-from src.paper.worker.tasks import generate_paper_task
+from src.paper.worker.tasks import generate_paper_task, resume_paper_task
 
 
 def get_redis_settings() -> RedisSettings:
@@ -27,9 +27,10 @@ def get_redis_settings() -> RedisSettings:
 
 
 class WorkerSettings:
-    functions = [generate_paper_task]
+    functions = [generate_paper_task, resume_paper_task]
     max_tries = 3
     job_timeout = 3600
+    allow_abort_jobs = True
     redis_settings = get_redis_settings()
 
     @staticmethod
@@ -52,6 +53,11 @@ class WorkerSettings:
             ("src.paper.models", "PaperRequest"),
             ("src.paper.models", "Question"),
             ("src.paper.models", "EvaluationPoint"),
+            ("src.paper.models", "DifficultyDistribution"),
+            ("src.paper.models", "QuestionTypes"),
+            ("src.paper.models", "ChapterStatus"),
+            ("src.paper.models", "DocumentType"),
+            ("src.paper.models", "SubjectType"),
         ]
 
         serde = JsonPlusSerializer(allowed_msgpack_modules=allowed_types)

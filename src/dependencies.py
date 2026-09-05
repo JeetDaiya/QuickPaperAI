@@ -191,6 +191,11 @@ async def lifespan(app: FastAPI):
         ("src.paper.models", "PaperRequest"),
         ("src.paper.models", "Question"),
         ("src.paper.models", "EvaluationPoint"),
+        ("src.paper.models", "DifficultyDistribution"),
+        ("src.paper.models", "QuestionTypes"),
+        ("src.paper.models", "ChapterStatus"),
+        ("src.paper.models", "DocumentType"),
+        ("src.paper.models", "SubjectType"),
     ]
     serde = JsonPlusSerializer(allowed_msgpack_modules=allowed_types)
     checkpointer = AsyncPostgresSaver(pool, serde=serde)
@@ -205,6 +210,9 @@ async def lifespan(app: FastAPI):
     yield
     
     await pool.close()
+    global arq_pool_instance
+    if arq_pool_instance is not None:
+        await arq_pool_instance.close()
 
 
 async def get_current_user(

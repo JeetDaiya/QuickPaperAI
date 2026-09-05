@@ -3,6 +3,7 @@ from typing import Optional
 from src.paper.graph.state import PaperState
 from langgraph.graph.state import CompiledStateGraph
 from langchain_core.runnables import RunnableConfig
+from src.base_settings import settings
 
 async def run_graph(
     agent: CompiledStateGraph,
@@ -19,7 +20,7 @@ async def run_graph(
             "thread_id": actual_thread_id,
             **dependencies
         },
-        max_concurrency=3
+        max_concurrency=settings.LANGGRAPH_MAX_CONCURRENCY
     )
     
     return await agent.ainvoke(config=config, input=paper_state)

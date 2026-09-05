@@ -39,16 +39,13 @@ async def generate_paper(
 async def resume_generation(
     thread_id: str,
     payload: ResumeRequest,
-    req: Request,
     current_user: dict = Depends(get_current_user),
     _: None = Depends(verify_thread_ownership),
     paper_service: PaperService = Depends(get_paper_service)
 ):
-    agent = req.app.state.agent
     return await paper_service.resume_generation(
         thread_id=thread_id,
         selected_indices=payload.selected_indices,
-        agent=agent,
     )
 
 

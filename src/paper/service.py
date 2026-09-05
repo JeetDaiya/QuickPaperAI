@@ -1,16 +1,13 @@
 import os
 import uuid
-import asyncio
 from typing import Optional
 
 from fastapi import HTTPException
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.types import Command
 from peewee import Database
 from starlette.responses import FileResponse
 
 from src.db.records.paper_record import PaperRecord, Status
-from src.paper.graph.config import GraphConfig
 from src.paper.graph.tracker import ProgressTracker
 from src.db.interfaces.interface import PaperRepository, ChunkRepository, UserRepository
 from src.paper.compilers.interfaces.interface import DocumentCompiler
@@ -162,15 +159,16 @@ class PaperService:
 
     async def cancel_generation(self, thread_id: str, db_pool: Database):
         try:
-            self.task_manager.cancel_task(thread_id=thread_id)
+            await self.progress_tracker.mark_cancelled(thread_id=thread_id)
+            await self.task_manager.cancel_task(thread_id=thread_id)
             await self.progress_tracker.delete_progress(thread_id=thread_id)
 
             try:
                 async with db_pool.connection() as conn:
-                    async with conn.cursor() as cur:
-                        await cur.execute("DELETE FROM checkpoints WHERE thread_id = %s", (thread_id,))
-                        await cur.execute("DELETE FROM checkpoint_blobs WHERE thread_id = %s", (thread_id,))
-                        await cur.execute("DELETE FROM checkpoint_writes WHERE thread_id = %s", (thread_id,))
+                    async with conn.transaction():
+                        async with conn.cursor() as cur:
+                            for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
+                                await cur.execute(f"DELETE FROM {table} WHERE thread_id = %s", (thread_id,))
                 print(f"[INFO] Cleaned all checkpointer DB entries for thread {thread_id}")
             except Exception as dbe:
                 print(f"[WARN] Could not clean Postgres checkpoints from Saver: {dbe}")
@@ -291,29 +289,6 @@ class PaperService:
 
         return {"thread_id": thread_id, "status": "generating"}
 
-    async def resume_generation(self, thread_id: str, selected_indices: list[int], agent: CompiledStateGraph):
-        dependencies = GraphConfig(
-            chunk_repo=self.chunk_repo,
-            html_paper_formatter=self.html_paper_formatter,
-            markdown_paper_formatter=self.markdown_paper_formatter,
-            document_compiler=self.document_compiler,
-            progress_tracker=self.progress_tracker
-        )
-
-        config = {
-            "configurable": {
-                "thread_id": thread_id,
-                **dependencies
-            }
-        }
-
-        resume_command = Command(
-            resume={
-                "selected_indices": selected_indices
-            }
-        )
-
-        print(f"[INFO] Resuming paper generation for thread {thread_id} with selected indices: {selected_indices}")
-        asyncio.create_task(agent.ainvoke(input=resume_command, config=config))
-
+    async def resume_generation(self, thread_id: str, selected_indices: list[int]):
+        await self.task_manager.register_resume_task(thread_id=thread_id, selected_indices=selected_indices)
         return {"status": "resumed", "thread_id": thread_id}

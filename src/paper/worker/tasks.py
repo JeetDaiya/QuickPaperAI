@@ -6,6 +6,8 @@ from src.paper.models import PaperRequest, ChapterStatus
 from src.paper.graph.state import PaperState
 from src.paper.graph.config import GraphConfig
 from src.notifications.constants.notification_messages import NotificationMessages
+from langgraph.types import Command
+from arq import Retry
 
 
 async def generate_paper_task(
@@ -114,4 +116,20 @@ async def generate_paper_task(
                 )
 
         # Re-raise so ARQ registers retry or records job failure
-        raise e
+        if current_try >= max_tries:
+            raise e
+        raise Retry(defer=current_try * 30)
+
+
+async def resume_paper_task(ctx: dict, thread_id: str, selected_indices: list[int]):
+    agent = ctx["agent"]
+    dependencies = GraphConfig(
+        chunk_repo=ctx["chunk_repo"],
+        html_paper_formatter=ctx["html_paper_formatter"],
+        markdown_paper_formatter=ctx["markdown_paper_formatter"],
+        document_compiler=ctx["document_compiler"],
+        progress_tracker=ctx["progress_tracker"]
+    )
+    config = {"configurable": {"thread_id": thread_id, **dependencies}}
+    resume_command = Command(resume={"selected_indices": selected_indices})
+    await agent.ainvoke(input=resume_command, config=config)

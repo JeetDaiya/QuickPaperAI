@@ -31,8 +31,12 @@ If you hit something new and non-obvious, add a line here — don't bury it in a
 - Postgrest's Python client has no `.distinct()` on select — dedupe chapter lists in Python.
 - LangGraph checkpoint state: every Pydantic type that can appear inside graph state
   (`PaperRequest`, `Question`, `EvaluationPoint`, `DifficultyDistribution`, enums, etc.) must be
-  explicitly registered in the `JsonPlusSerializer` allow-list, or resumed/crashed runs fail to
-  deserialize silently.
+  explicitly registered in the `JsonPlusSerializer` allow-list in **both** `src/dependencies.py`
+  and `src/paper/worker/settings.py` — they must stay identical. Missing types cause silent
+  deserialization failures on resume.
+- ARQ retry backoff: `generate_paper_task` uses `arq.jobs.Retry(defer=current_try * 30)` for
+  linear backoff on transient failures — don't replace with a bare `raise` or retries fire
+  immediately.
 
 ## Frontend
 - `VITE_API_BASE_URL` needs an explicit `http(s)://` prefix or the browser treats API calls as
