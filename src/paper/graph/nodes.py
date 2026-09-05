@@ -1,6 +1,9 @@
 import os
+import asyncio
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from langchain_core.runnables import RunnableConfig
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.exceptions import OutputParserException
 from langgraph.types import Send, interrupt
 
 from src.config.prompts import QUESTION_GENERATOR_SCIENCE_SYSTEM_PROMPT, QUESTION_GENERATOR_SYSTEM_SS_PROMPT
@@ -15,6 +18,16 @@ from src.paper.graph.tracker import ProgressTracker
 from src.paper.graph.utils import clean_latex, group_by_subtopic, build_quota_instructions
 
 rate_limiter = TokenBucket(max_capacity=5, refil_rate=0.0833)
+
+
+@retry(
+    stop=stop_after_attempt(2),
+    wait=wait_fixed(2),
+    retry=retry_if_exception_type((asyncio.TimeoutError, OutputParserException)),
+    reraise=True
+)
+async def _generate_batch(generator_chain, batch_input: dict, timeout: int = 90):
+    return await asyncio.wait_for(generator_chain.ainvoke(batch_input), timeout=timeout)
 
 
 async def question_generator_node(state: ChapterState, config: RunnableConfig) -> dict:
@@ -70,6 +83,10 @@ async def question_generator_node(state: ChapterState, config: RunnableConfig) -
     generator_chain = generator_prompt | structured_model
     
     for i, batch in enumerate(topic_batches):
+        if await progress_tracker.is_cancelled(thread_id=thread_id):
+            print(f"[{chapter}] Cancelled — stopping after {len(question_list)} questions")
+            break
+
         previous_question = (
             "\n".join([q.question_text for q in question_list][-(subjective_count + objective_count):]) 
             if question_list else "None yet"
@@ -86,7 +103,7 @@ async def question_generator_node(state: ChapterState, config: RunnableConfig) -
         )
         
         try:
-            batch_output = await generator_chain.ainvoke({
+            batch_output = await _generate_batch(generator_chain, {
                 "formatted_chunks": batch["content"],
                 "previous_questions": previous_question,
                 "required_quota_instructions": quota_instructions

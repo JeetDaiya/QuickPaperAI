@@ -30,6 +30,7 @@ typing-extensions>=4.15.0
 
 fastapi-mail==1.6.4
 upstash-redis
+tenacity
 
 starlette
 peewee

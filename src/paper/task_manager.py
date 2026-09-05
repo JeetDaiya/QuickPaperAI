@@ -1,4 +1,3 @@
-import asyncio
 from typing import Optional
 from arq import ArqRedis
 from arq.jobs import Job, JobStatus
@@ -30,7 +29,7 @@ class TaskManager:
     async def cancel_task(self, thread_id: str) -> bool:
         try:
             job = Job(job_id=thread_id, redis=self.redis_pool)
-            success = await job.abort()
+            success = await job.abort(timeout=10)
             print(f"[INFO] Aborted ARQ job for thread {thread_id}: {success}")
             return success
         except Exception as e:
@@ -45,4 +44,13 @@ class TaskManager:
         except Exception as e:
             print(f"[WARN] Could not get status of task {thread_id}: {e}")
             return False
+
+    async def register_resume_task(self, thread_id: str, selected_indices: list[int]) -> None:
+        await self.redis_pool.enqueue_job(
+            "resume_paper_task",
+            thread_id,
+            selected_indices,
+            _job_id=f"{thread_id}-resume"
+        )
+        print(f"[INFO] Resume task for thread {thread_id} enqueued into ARQ Redis pool.")
 

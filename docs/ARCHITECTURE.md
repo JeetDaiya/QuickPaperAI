@@ -30,14 +30,18 @@ START → distribute → [Send: per chapter, parallel]
   → END
 ```
 - Checkpointed via `AsyncPostgresSaver` — survives crashes/restarts; resumable by `thread_id`.
-- Cancellation: `progress_tracker.is_cancelled(thread_id)` should be checked between batches
-  inside `question_generator_node` — verify this is actually wired before assuming cancel works.
+- Cancellation: `progress_tracker.mark_cancelled(thread_id)` sets a Redis flag;
+  `question_generator_node` checks `is_cancelled` at the top of each batch iteration and breaks
+  early.
+- LLM calls: each batch invocation is wrapped in `_generate_batch` with a 90s `asyncio.wait_for`
+  timeout and `tenacity` retry (2 attempts, 2s apart) for `TimeoutError` / `OutputParserException`.
 - Retries: `RetryPolicy` on fanned-out nodes, up to 3 attempts, exponential backoff + jitter,
   for 429 / 503 / structural decode failures.
 
 ## Background execution
 - Durable ARQ (Redis-backed) worker, not in-process `asyncio.Task`.
 - `TaskManager.register_task` enqueues `generate_paper_task` with `_job_id=thread_id` (dedup).
+- `TaskManager.register_resume_task` enqueues `resume_paper_task` with `_job_id={thread_id}-resume`.
 - Worker resumes from Postgres checkpoint if one exists for the thread; otherwise fresh run.
 - Progress: `ProgressTracker` (Upstash Redis) — `HSET progress:{thread_id}`, 2h TTL,
   best-effort (read/write/delete failures are swallowed; generation continues on Redis outage).

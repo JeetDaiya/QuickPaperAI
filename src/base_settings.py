@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     # origins are always added in app.py). Set in .env on the deployed backend.
     ALLOWED_ORIGINS: str = "https://quick-paper-ai-ruddy.vercel.app"
 
+    LANGGRAPH_MAX_CONCURRENCY: int = 3
+
     @field_validator("SECRET_KEY")
     @classmethod
     def _validate_secret_key(cls, v):
