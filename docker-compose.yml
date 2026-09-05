@@ -6,6 +6,7 @@ services:
       - .env
     volumes:
       - ./firebase-credentials.json:/app/firebase-credentials.json:ro
+      - paper_outputs:/app/outputs
     expose:
       - "8000"
     networks:
@@ -19,6 +20,7 @@ services:
       - .env
     volumes:
       - ./firebase-credentials.json:/app/firebase-credentials.json:ro
+      - paper_outputs:/app/outputs
     networks:
       - webnet
 
@@ -42,3 +44,4 @@ networks:
 volumes:
   caddy_data:
   caddy_config:
+  paper_outputs:

@@ -1,4 +1,3 @@
-1
 from typing import Optional
 from src.paper.graph.state import PaperState
 from langgraph.graph.state import CompiledStateGraph
