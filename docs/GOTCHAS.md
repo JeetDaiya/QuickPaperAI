@@ -54,9 +54,12 @@ If you hit something new and non-obvious, add a line here — don't bury it in a
   `resume_paper_task` in `worker/tasks.py` **after** `run_graph`/`agent.ainvoke` returns — never
   from inside a graph node — so the checkpoint state is guaranteed durable before the notification
   fires. If you add a new terminal outcome to the graph, make sure something calls
-  `notify_thread_updated()` (or an equivalent publish) after it, or the stream will wait for a
-  shout that never comes. Redis pub/sub doesn't redeliver a dropped message — the worst case is
-  one stale browser tab that needs a manual refresh, not a stuck server-side loop.
+  `notify_thread_updated()` (or an equivalent publish) after it. The stream subscribes **before**
+  its initial `check_status()` (pub/sub doesn't buffer for absent subscribers — checking first
+  would let a "finished" shout land in the gap and be lost), and on each `get_message` timeout it
+  re-checks status anyway as a self-healing safety net, so a dropped/mistimed shout costs at most
+  ~10s of lag, never a browser tab stuck until manual refresh. Don't turn that timeout back into a
+  bare `continue` — that reintroduces the "completed paper needs a refresh" bug.
 
 ## Frontend
 - `VITE_API_BASE_URL` needs an explicit `http(s)://` prefix or the browser treats API calls as
