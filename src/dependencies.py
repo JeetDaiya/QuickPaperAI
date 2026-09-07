@@ -242,9 +242,12 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     
-    if not token:
+    # Only the SSE stream endpoint falls back to a query-param token — EventSource can't set an
+    # Authorization header. Everywhere else, a `?token=` would just leak the token into access
+    # logs / browser history / proxies, so don't honor it.
+    if not token and request.url.path.endswith("/stream"):
         token = request.query_params.get("token")
-        
+
     if not token:
         raise credentials_exception
     
