@@ -65,30 +65,33 @@ async def stream_generation_status(
         return json.dumps(status_data), status_data
 
     async def generator():
-        current_state, status_data = await check_status()
-        last_state = current_state
-        yield f"data: {current_state}\n\n"
-
-        if status_data.get("status") in TERMINAL_STATUSES:
-            return
-
-        # Push-based from here: subscribe to the channel ProgressTracker publishes to
-        # (on chapter progress, and on notify_thread_updated() after a task finishes) and
-        # only re-check real status when a message actually arrives — no polling loop.
+        # Subscribe BEFORE the initial status check. Redis pub/sub doesn't buffer for absent
+        # subscribers, so if we checked first and a "finished" shout landed in the gap before
+        # subscribing, it would be lost and the stream would hang until a manual refresh. By
+        # subscribing first, any shout after this point is buffered for us; any shout that fired
+        # earlier means the state is already durable, so the initial check below catches it.
         channel = f"channel:progress:{thread_id}"
         pubsub = get_pubsub_redis().pubsub()
         await pubsub.subscribe(channel)
 
         try:
+            current_state, status_data = await check_status()
+            last_state = current_state
+            yield f"data: {current_state}\n\n"
+
+            if status_data.get("status") in TERMINAL_STATUSES:
+                return
+
             while True:
                 if await req.is_disconnected():
                     break
 
-                # timeout here is purely a local disconnect-check cadence on the already-open
-                # subscription — it costs no Redis requests, unlike the old 1-second poll loop.
-                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=10)
-                if message is None:
-                    continue
+                # Push-based: a message means real progress happened, re-check status then.
+                # On timeout (no message) we still re-check as a self-healing safety net — a
+                # dropped pub/sub message would otherwise leave the stream waiting forever. The
+                # 10s cadence keeps this cheap (only while generation is in flight), unlike the
+                # old 1s poll.
+                await pubsub.get_message(ignore_subscribe_messages=True, timeout=10)
 
                 current_state, status_data = await check_status()
                 if current_state != last_state:
