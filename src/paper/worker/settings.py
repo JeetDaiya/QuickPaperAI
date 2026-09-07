@@ -32,6 +32,7 @@ class WorkerSettings:
     job_timeout = 3600
     allow_abort_jobs = True
     redis_settings = get_redis_settings()
+    poll_delay = 5.0
 
     @staticmethod
     async def on_startup(ctx: dict) -> None:

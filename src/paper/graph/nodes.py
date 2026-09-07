@@ -1,6 +1,6 @@
 import os
 import asyncio
-from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
+from tenacity import retry, stop_after_attempt, wait_random_exponential, retry_if_exception
 from langchain_core.runnables import RunnableConfig
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.exceptions import OutputParserException
@@ -20,10 +20,27 @@ from src.paper.graph.utils import clean_latex, group_by_subtopic, build_quota_in
 rate_limiter = TokenBucket(max_capacity=5, refil_rate=0.0833)
 
 
+def _is_retryable_error(exc: Exception) -> bool:
+    """Retry transient failures: timeouts, malformed structured output, and provider rate limits
+    (429 / ResourceExhausted / quota). Rate limits are matched by message rather than exception
+    class so this works across providers — Gemini and the Groq fallbacks raise different
+    exception types for the same 429."""
+    if isinstance(exc, (asyncio.TimeoutError, OutputParserException)):
+        return True
+    msg = str(exc).lower()
+    return (
+        "429" in msg
+        or "rate limit" in msg
+        or "resourceexhausted" in msg
+        or "resource_exhausted" in msg
+        or "quota" in msg
+    )
+
+
 @retry(
-    stop=stop_after_attempt(2),
-    wait=wait_fixed(2),
-    retry=retry_if_exception_type((asyncio.TimeoutError, OutputParserException)),
+    stop=stop_after_attempt(4),
+    wait=wait_random_exponential(multiplier=2, max=30),
+    retry=retry_if_exception(_is_retryable_error),
     reraise=True
 )
 async def _generate_batch(generator_chain, batch_input: dict, timeout: int = 90):
@@ -110,7 +127,10 @@ async def question_generator_node(state: ChapterState, config: RunnableConfig) -
             })
             question_list.extend(batch_output.question_list)
         except Exception as e:
-            print(f"  ⚠️ Batch {i+1} failed, skipping: {e}")
+            # Only reached after _generate_batch's retries are exhausted; drops just this one
+            # batch, not the whole chapter. (Malformed questions no longer land here — the
+            # Question validator normalizes instead of raising, so they survive to review.)
+            print(f"  ⚠️ Batch {i+1} failed after retries, skipping: {e}")
 
     question_list = [q for q in question_list if q.question_type in allowed_types]
 

@@ -133,32 +133,34 @@ class Question(BaseModel):
         return v
         
     @model_validator(mode="after")
-    def validate_question_logic(self) -> "Question":
-        if self.question_type == QuestionTypes.MCQ:
-            if not self.options or len(self.options) != 4:
-                raise ValueError("MCQ questions must have exactly 4 options.")
-            
-            ans = self.correct_answer.strip()
-            option_matches = any(ans == opt or opt == ans or ans in opt or opt in ans for opt in self.options)
-            prefix_match = any(ans.lower().startswith(f"({c})") or ans.lower().startswith(f"{c})") for c in "abcd")
-            if not (option_matches or prefix_match):
-                raise ValueError(f"MCQ correct_answer '{self.correct_answer}' does not match any of the options: {self.options}")
-        
+    def normalize_question(self) -> "Question":
+        # NOTE: this validator NORMALIZES rather than raises. The LLM returns a whole batch of
+        # ~10 questions as one BatchOutput, so if any single question raised here, the entire
+        # batch failed to parse and was silently dropped (see nodes.question_generator_node) —
+        # producing papers short of the requested count. Since a human reviews and selects
+        # questions before the paper is compiled, it's far better to let an imperfect question
+        # through to that review screen than to drop ten good ones because of it.
         if self.question_type.is_subjective:
+            # Subjective marks are fully determined by the type — correct a mismatch instead of
+            # failing, and keep the marking scheme summing to the corrected total.
             expected_marks = {
                 QuestionTypes.TWO_MARK_ANS: 2,
                 QuestionTypes.THREE_MARK_ANS: 3,
                 QuestionTypes.FOUR_MARK_ANS: 4,
-            }[self.question_type]
-            
-            if self.marks != expected_marks:
-                raise ValueError(f"Question of type {self.question_type} must have {expected_marks} marks, got {self.marks}")
-            
-            if self.evaluation_scheme:
-                total_scheme_marks = sum(pt.allocated_marks for pt in self.evaluation_scheme)
-                if total_scheme_marks != self.marks:
-                    raise ValueError(f"Sum of evaluation_scheme marks ({total_scheme_marks}) must equal total question marks ({self.marks})")
-        
+            }.get(self.question_type)
+
+            if expected_marks is not None:
+                self.marks = expected_marks
+
+                if self.evaluation_scheme:
+                    total_scheme_marks = sum(pt.allocated_marks for pt in self.evaluation_scheme)
+                    if total_scheme_marks != self.marks:
+                        base = max(1, self.marks // len(self.evaluation_scheme))
+                        for pt in self.evaluation_scheme:
+                            pt.allocated_marks = base
+                        remainder = self.marks - base * len(self.evaluation_scheme)
+                        self.evaluation_scheme[0].allocated_marks += remainder
+
         return self
 
 
