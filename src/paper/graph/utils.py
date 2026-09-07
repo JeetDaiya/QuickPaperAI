@@ -191,7 +191,7 @@ def build_quota_instructions(
     elif objective_count > 0:
         base_instruction = (
             f"Please generate EXACTLY {objective_count} objective questions using ONLY these allowed types: {allowed_obj_values} based strictly "
-            "on this textbook content. Do NOT generate any objective questions."
+            "on this textbook content. Do NOT generate any subjective questions."
         )
     elif subjective_count > 0:
         base_instruction = (
