@@ -50,11 +50,21 @@ class CustomDocumentCompiler(DocumentCompiler):
             f.write(markdown)
         try:
             cmd = ["pandoc", "-f", "markdown", "-t", "docx", temp_md_path, "-o", output_path]
-            proc = await asyncio.create_subprocess_exec(*cmd)
-            await proc.communicate()
+            proc = await asyncio.create_subprocess_exec(*cmd, stderr=asyncio.subprocess.PIPE)
+            try:
+                _, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
+                raise RuntimeError("Pandoc DOCX compilation timed out after 60s")
+
+            # communicate() doesn't raise on a non-zero exit — check it explicitly, else a failed
+            # conversion would look like success and leave no (or a corrupt) DOCX behind.
+            if proc.returncode != 0:
+                err = stderr.decode(errors="replace").strip() if stderr else ""
+                raise RuntimeError(f"Pandoc exited with code {proc.returncode}: {err}")
+
             print(f"[INFO] DOCX Question Paper compiled successfully to {output_path}")
-        except Exception as e:
-            print(f"[WARN] Pandoc DOCX compilation failed: {e}")
         finally:
             if os.path.exists(temp_md_path):
                 os.remove(temp_md_path)
