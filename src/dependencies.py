@@ -10,6 +10,7 @@ from psycopg_pool import AsyncConnectionPool
 from psycopg.rows import dict_row
 from supabase import create_client, Client
 from upstash_redis.asyncio import Redis
+import redis.asyncio as redis_asyncio
 
 from src.base_settings import settings
 from src.auth.interface.interface import AuthService
@@ -117,6 +118,18 @@ def get_progress_tracker() -> ProgressTracker:
     return ProgressTracker(redis_client=redis_client, ttl_seconds=86400)
 
 
+pubsub_redis_instance: Optional[redis_asyncio.Redis] = None
+
+
+def get_pubsub_redis() -> redis_asyncio.Redis:
+    """Raw TCP Redis connection (as opposed to the REST-based `upstash_redis` client used
+    elsewhere) — needed because REST clients can't hold a blocking pub/sub SUBSCRIBE."""
+    global pubsub_redis_instance
+    if pubsub_redis_instance is None:
+        pubsub_redis_instance = redis_asyncio.Redis.from_url(settings.REDIS_URL, decode_responses=True)
+    return pubsub_redis_instance
+
+
 arq_pool_instance = None
 
 async def get_arq_pool():
@@ -213,6 +226,9 @@ async def lifespan(app: FastAPI):
     global arq_pool_instance
     if arq_pool_instance is not None:
         await arq_pool_instance.close()
+    global pubsub_redis_instance
+    if pubsub_redis_instance is not None:
+        await pubsub_redis_instance.aclose()
 
 
 async def get_current_user(

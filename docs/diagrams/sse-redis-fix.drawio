@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="26.0.0">
+  <diagram name="Before-After">
+    <mxGraphModel dx="1600" dy="1400" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1650" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ===================== BEFORE SWIMLANE ===================== -->
+        <mxCell id="lane-before" value="BEFORE — 1-second polling (the bug)" style="swimlane;startSize=30;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=16;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="1560" height="460" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b-browser" value="Browser&#xa;(EventSource)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="lane-before">
+          <mxGeometry x="30" y="60" width="140" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b-app" value="app container" style="swimlane;startSize=24;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="lane-before">
+          <mxGeometry x="240" y="40" width="300" height="280" as="geometry" />
+        </mxCell>
+        <mxCell id="b-sseloop" value="stream_generation_status:&#xa;while True:&#xa;  get_generation_status()&#xa;  sleep(1)&#xa;  # repeats forever until&#xa;  # terminal status seen" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;align=left;spacingLeft=6;fontSize=11;" vertex="1" parent="b-app">
+          <mxGeometry x="20" y="40" width="260" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="b-appdisk" value="local disk&#xa;outputs/{thread_id}/" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;" vertex="1" parent="b-app">
+          <mxGeometry x="70" y="180" width="160" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b-worker" value="worker container (ARQ)" style="swimlane;startSize=24;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="lane-before">
+          <mxGeometry x="620" y="40" width="300" height="280" as="geometry" />
+        </mxCell>
+        <mxCell id="b-pdfnode" value="resume_paper_task&#xa;→ pdf_node writes&#xa;paper.pdf" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="b-worker">
+          <mxGeometry x="70" y="40" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="b-workerdisk" value="local disk&#xa;outputs/{thread_id}/" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;" vertex="1" parent="b-worker">
+          <mxGeometry x="70" y="180" width="160" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b-redis" value="Redis (Upstash)&#xa;progress hash" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="lane-before">
+          <mxGeometry x="1020" y="80" width="150" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="b-pg" value="Postgres&#xa;checkpoints" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="lane-before">
+          <mxGeometry x="1240" y="80" width="150" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b-e1" value="SSE connection" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.4;" edge="1" parent="lane-before" source="b-browser" target="b-app">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b-e2" value="1× /sec: read&#xa;progress hash" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;fontSize=11;exitX=1;exitY=0.3;entryX=0;entryY=0.3;" edge="1" parent="lane-before" source="b-app" target="b-redis">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b-e3" value="1× /sec: read&#xa;graph state" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;fontSize=11;exitX=1;exitY=0.7;entryX=0;entryY=0.6;" edge="1" parent="lane-before" source="b-app" target="b-pg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b-e4" value="writes PDF" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;fontSize=11;" edge="1" parent="lane-before" source="b-pdfnode" target="b-workerdisk">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b-e5" value="checks own disk&#xa;→ FILE NOT FOUND" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;fontSize=11;strokeColor=#b85450;fontColor=#b85450;fontStyle=1;" edge="1" parent="lane-before" source="b-sseloop" target="b-appdisk">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b-callout" value="BUG: app and worker are separate containers, no shared volume for outputs/.&#xa;get_generation_status() can never see the PDF the worker wrote →&#xa;status never reaches &quot;completed&quot; → the loop above never stops →&#xa;1 req/sec to Redis for as long as the tab stays open →&#xa;500,000-request Upstash quota burned in ~4 days → 500s app-wide." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=12;align=left;spacingLeft=8;verticalAlign=middle;" vertex="1" parent="lane-before">
+          <mxGeometry x="240" y="335" width="1290" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== AFTER SWIMLANE ===================== -->
+        <mxCell id="lane-after" value="AFTER — push via Redis Pub/Sub (the fix)" style="swimlane;startSize=30;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=16;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="40" y="520" width="1560" height="520" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a-browser" value="Browser&#xa;(EventSource)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="lane-after">
+          <mxGeometry x="30" y="70" width="140" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a-app" value="app container" style="swimlane;startSize=24;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="lane-after">
+          <mxGeometry x="240" y="40" width="300" height="340" as="geometry" />
+        </mxCell>
+        <mxCell id="a-sub" value="stream_generation_status:&#xa;subscribe(channel:progress:&#xa;{thread_id})&#xa;idle — no requests&#xa;until a message arrives" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;align=left;spacingLeft=6;fontSize=11;" vertex="1" parent="a-app">
+          <mxGeometry x="20" y="40" width="260" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="a-recheck" value="on message: call&#xa;get_generation_status()&#xa;once, forward result to&#xa;browser via SSE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;align=left;spacingLeft=6;fontSize=11;" vertex="1" parent="a-app">
+          <mxGeometry x="20" y="150" width="260" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a-worker" value="worker container (ARQ)" style="swimlane;startSize=24;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="lane-after">
+          <mxGeometry x="620" y="40" width="300" height="340" as="geometry" />
+        </mxCell>
+        <mxCell id="a-task" value="generate_paper_task /&#xa;resume_paper_task:&#xa;await run_graph()/ainvoke()&#xa;(runs pdf_node inside)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;align=left;spacingLeft=6;fontSize=11;" vertex="1" parent="a-worker">
+          <mxGeometry x="20" y="40" width="260" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="a-notify" value="NEW: after ainvoke()&#xa;returns (success or&#xa;failure) →&#xa;progress_tracker.&#xa;notify_thread_updated()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;align=left;spacingLeft=6;fontSize=11;" vertex="1" parent="a-worker">
+          <mxGeometry x="20" y="150" width="260" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a-vol" value="shared Docker volume&#xa;paper_outputs:/app/outputs&#xa;(NEW — mounted in BOTH containers)" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=11;" vertex="1" parent="lane-after">
+          <mxGeometry x="400" y="270" width="240" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a-redis" value="Redis&#xa;progress hash +&#xa;pub/sub channel" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="lane-after">
+          <mxGeometry x="1000" y="90" width="150" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="a-pg" value="Postgres&#xa;checkpoints" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="lane-after">
+          <mxGeometry x="1220" y="90" width="150" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a-e1" value="SSE connection&#xa;(subscribes, waits)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.3;" edge="1" parent="lane-after" source="a-browser" target="a-app">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a-e2" value="1: publish &quot;shout&quot;&#xa;(chapter update, or&#xa;notify_thread_updated)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.3;strokeColor=#9673a6;fontColor=#9673a6;fontStyle=1;" edge="1" parent="lane-after" source="a-worker" target="a-redis">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a-e3" value="2: pub/sub message&#xa;delivered" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;fontSize=11;exitX=0;exitY=0.5;entryX=1;entryY=0.4;strokeColor=#9673a6;fontColor=#9673a6;fontStyle=1;" edge="1" parent="lane-after" source="a-redis" target="a-app">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a-e4" value="3: re-check&#xa;graph state" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;fontSize=11;exitX=1;exitY=0.75;entryX=0;entryY=0.5;" edge="1" parent="lane-after" source="a-app" target="a-pg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a-e5" value="4: forward status" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;fontSize=11;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="lane-after" source="a-app" target="a-browser">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a-e6" value="writes PDF to&#xa;shared volume" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;fontSize=11;" edge="1" parent="lane-after" source="a-task" target="a-vol">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a-e7" value="reads PDF —&#xa;now visible!" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;fontSize=11;strokeColor=#82b366;fontColor=#82b366;fontStyle=1;" edge="1" parent="lane-after" source="a-recheck" target="a-vol">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a-callout" value="FIX: (1) shared Docker volume makes the PDF visible to both containers — status can now reach &quot;completed&quot;.&#xa;(2) SSE subscribes to Redis pub/sub instead of polling every second — requests only happen on real events.&#xa;(3) notify_thread_updated() is called AFTER ainvoke() returns (state already durable) — covers awaiting_review/completed/failed&#xa;with no race, so the old always-on polling loop is gone entirely." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=12;align=left;spacingLeft=8;verticalAlign=middle;" vertex="1" parent="lane-after">
+          <mxGeometry x="30" y="395" width="1500" height="110" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
