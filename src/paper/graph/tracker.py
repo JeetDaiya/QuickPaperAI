@@ -64,6 +64,15 @@ class ProgressTracker:
         except Exception as e:
             print(f"Updating progress failed for {thread_id}, chapter {chapter}, {e}")
 
+    async def notify_thread_updated(self, thread_id: str) -> None:
+        """Publish a bare notification with no state change, for transitions (e.g. PDF
+        compilation finishing) that have no chapter-progress state of their own to write."""
+        channel = self._get_channel_key(thread_id=thread_id)
+        try:
+            await self.redis_client.publish(channel=channel, message=json.dumps({"event": "updated"}))
+        except Exception as e:
+            print(f"Notifying update failed for {thread_id}, {e}")
+
     async def get_chapter_progress(self, thread_id: str) -> dict[str, ChapterProgress]:
         key = self._get_progress_key(thread_id=thread_id)
 

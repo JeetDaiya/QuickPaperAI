@@ -44,6 +44,19 @@ If you hit something new and non-obvious, add a line here — don't bury it in a
   `get_generation_status`/`download_file`/`save_to_cloud` run in the `app` container. Without
   the shared volume, the app container never sees the compiled files and generation appears to
   hang forever even though the worker finished successfully.
+- `stream_generation_status` (`routes.py`) is push-based, not polling: it subscribes to Redis
+  channel `channel:progress:{thread_id}` (via a raw TCP `redis.asyncio` connection from
+  `get_pubsub_redis()` — the REST-based `upstash_redis` client used elsewhere can't hold a
+  blocking `SUBSCRIBE`) and only re-checks `get_generation_status()` when a message arrives,
+  instead of polling Redis every second. `ProgressTracker.update_chapter_progress` already
+  publishes on chapter updates; `ProgressTracker.notify_thread_updated()` covers the rest (PDF
+  compilation has no chapter-progress state of its own) and is called from `generate_paper_task`/
+  `resume_paper_task` in `worker/tasks.py` **after** `run_graph`/`agent.ainvoke` returns — never
+  from inside a graph node — so the checkpoint state is guaranteed durable before the notification
+  fires. If you add a new terminal outcome to the graph, make sure something calls
+  `notify_thread_updated()` (or an equivalent publish) after it, or the stream will wait for a
+  shout that never comes. Redis pub/sub doesn't redeliver a dropped message — the worst case is
+  one stale browser tab that needs a manual refresh, not a stuck server-side loop.
 
 ## Frontend
 - `VITE_API_BASE_URL` needs an explicit `http(s)://` prefix or the browser treats API calls as

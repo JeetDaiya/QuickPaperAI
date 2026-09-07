@@ -1,5 +1,4 @@
 import json
-import asyncio
 
 from fastapi import APIRouter, Depends, Request
 from peewee import Database
@@ -7,8 +6,10 @@ from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
 from src.paper.schemas import PaperGenerateRequest
-from src.dependencies import get_current_user, get_paper_service, verify_thread_ownership, extract_user_id
+from src.dependencies import get_current_user, get_paper_service, verify_thread_ownership, extract_user_id, get_pubsub_redis
 from src.paper.service import PaperService
+
+TERMINAL_STATUSES = ("completed", "failed", "awaiting_review")
 
 paper_router = APIRouter(prefix='/api')
 
@@ -58,23 +59,47 @@ async def stream_generation_status(
     paper_service: PaperService = Depends(get_paper_service)
 ):
     user_id = extract_user_id(current_user)
+
+    async def check_status() -> tuple[str, dict]:
+        status_data = await paper_service.get_generation_status(thread_id=thread_id, agent=req.app.state.agent, user_id=user_id)
+        return json.dumps(status_data), status_data
+
     async def generator():
-        last_state = None
+        current_state, status_data = await check_status()
+        last_state = current_state
+        yield f"data: {current_state}\n\n"
 
-        while True:
-            if await req.is_disconnected():
-                break
-            status_data = await paper_service.get_generation_status(thread_id=thread_id, agent=req.app.state.agent, user_id=user_id)
+        if status_data.get("status") in TERMINAL_STATUSES:
+            return
 
-            current_state = json.dumps(status_data)
+        # Push-based from here: subscribe to the channel ProgressTracker publishes to
+        # (on chapter progress, and on notify_thread_updated() after a task finishes) and
+        # only re-check real status when a message actually arrives — no polling loop.
+        channel = f"channel:progress:{thread_id}"
+        pubsub = get_pubsub_redis().pubsub()
+        await pubsub.subscribe(channel)
 
-            if current_state != last_state:
-                yield f"data: {current_state}\n\n"
-                last_state = current_state
+        try:
+            while True:
+                if await req.is_disconnected():
+                    break
 
-            if status_data.get("status") in ("completed", "failed", "awaiting_review"):
-                break
-            await asyncio.sleep(1)
+                # timeout here is purely a local disconnect-check cadence on the already-open
+                # subscription — it costs no Redis requests, unlike the old 1-second poll loop.
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=10)
+                if message is None:
+                    continue
+
+                current_state, status_data = await check_status()
+                if current_state != last_state:
+                    last_state = current_state
+                    yield f"data: {current_state}\n\n"
+
+                if status_data.get("status") in TERMINAL_STATUSES:
+                    break
+        finally:
+            await pubsub.unsubscribe(channel)
+            await pubsub.aclose()
 
     return StreamingResponse(
         generator(),

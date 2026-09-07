@@ -56,6 +56,11 @@ async def generate_paper_task(
 
         print(f"[INFO] run_graph execution finished for thread {thread_id}")
 
+        # Wake up any subscribed SSE stream now that the checkpoint state is durable
+        # (awaiting_review or completed) — must come after run_graph returns, not from
+        # inside a graph node, or a subscriber could re-check before the state is readable.
+        await progress_tracker.notify_thread_updated(thread_id=thread_id)
+
         # Inspect graph snapshot to detect if review_node interrupt was reached
         post_run_snapshot = await agent.aget_state({"configurable": {"thread_id": thread_id}})
         has_interrupts = bool(post_run_snapshot.tasks and post_run_snapshot.tasks[0].interrupts)
@@ -123,13 +128,21 @@ async def generate_paper_task(
 
 async def resume_paper_task(ctx: dict, thread_id: str, selected_indices: list[int]):
     agent = ctx["agent"]
+    progress_tracker = ctx["progress_tracker"]
     dependencies = GraphConfig(
         chunk_repo=ctx["chunk_repo"],
         html_paper_formatter=ctx["html_paper_formatter"],
         markdown_paper_formatter=ctx["markdown_paper_formatter"],
         document_compiler=ctx["document_compiler"],
-        progress_tracker=ctx["progress_tracker"]
+        progress_tracker=progress_tracker
     )
     config = {"configurable": {"thread_id": thread_id, **dependencies}}
     resume_command = Command(resume={"selected_indices": selected_indices})
-    await agent.ainvoke(input=resume_command, config=config)
+
+    try:
+        await agent.ainvoke(input=resume_command, config=config)
+    finally:
+        # Wake up any subscribed SSE stream regardless of outcome (completed or failed) —
+        # this is what makes the PDF-compilation step visible to the pub/sub-driven stream,
+        # since pdf_node itself never publishes anything.
+        await progress_tracker.notify_thread_updated(thread_id=thread_id)
