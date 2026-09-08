@@ -54,11 +54,18 @@ async def resume_generation(
 async def stream_generation_status(
     thread_id: str,
     req: Request,
+    wait_past_review: bool = False,
     current_user: dict = Depends(get_current_user),
     _: None = Depends(verify_thread_ownership),
     paper_service: PaperService = Depends(get_paper_service)
 ):
     user_id = extract_user_id(current_user)
+
+    # The done page opens this stream right after POSTing /resume, which only enqueues the
+    # ARQ job — the checkpoint can still read "awaiting_review" for a moment before the worker
+    # picks it up. Treating that stale read as terminal would close the stream before the real
+    # "completed"/"failed" transition ever arrives, leaving the page stuck until a manual refresh.
+    close_statuses = ("completed", "failed") if wait_past_review else TERMINAL_STATUSES
 
     async def check_status() -> tuple[str, dict]:
         status_data = await paper_service.get_generation_status(thread_id=thread_id, agent=req.app.state.agent, user_id=user_id)
@@ -79,7 +86,7 @@ async def stream_generation_status(
             last_state = current_state
             yield f"data: {current_state}\n\n"
 
-            if status_data.get("status") in TERMINAL_STATUSES:
+            if status_data.get("status") in close_statuses:
                 return
 
             while True:
@@ -98,7 +105,7 @@ async def stream_generation_status(
                     last_state = current_state
                     yield f"data: {current_state}\n\n"
 
-                if status_data.get("status") in TERMINAL_STATUSES:
+                if status_data.get("status") in close_statuses:
                     break
         finally:
             await pubsub.unsubscribe(channel)

@@ -36,7 +36,7 @@ function DonePage() {
   const [cloudStatus, setCloudStatus] = useState<"idle" | "pending" | "success" | "failed">("idle");
   const [cloudError, setCloudError] = useState<string | null>(null);
 
-  const { data, isLoading } = useGenerationStatus(threadId);
+  const { data, isLoading } = useGenerationStatus(threadId, { waitPastReview: true });
 
   const ready = data?.status === "completed";
   const failed = data?.status === "failed";
