@@ -66,7 +66,7 @@ class CustomAuthService(AuthService):
 
     async def register_user(self, email: str, password: str, name: str) -> dict:
         try:
-            db_user = self.user_repo.get_user(email=email)
+            db_user = await asyncio.to_thread(self.user_repo.get_user, email=email)
         except SupabaseException as e:
             print(f"DB Error checking email {email}: {e}")
             raise HTTPException(status_code=500, detail="Database error during registration check")
@@ -77,7 +77,7 @@ class CustomAuthService(AuthService):
         # Hash password and create user in DB
         hashed_password = await self._get_hashed_password(password)
         try:
-            new_user = self.user_repo.create_user(email=email, hashed_password=hashed_password, name=name)
+            new_user = await asyncio.to_thread(self.user_repo.create_user, email=email, hashed_password=hashed_password, name=name)
             if not new_user:
                 raise HTTPException(status_code=500, detail="Failed to create user record")
             return new_user
@@ -87,7 +87,7 @@ class CustomAuthService(AuthService):
 
     async def authenticate_user(self, email: str, password: str) -> dict:
         try:
-            user = self.user_repo.get_user(email=email)
+            user = await asyncio.to_thread(self.user_repo.get_user, email=email)
         except SupabaseException as e:
             print(f"❌ DB Error fetching user {email}: {e}")
             raise HTTPException(status_code=500, detail="Database authentication error")
@@ -109,7 +109,7 @@ class CustomAuthService(AuthService):
         if used_legacy:
             try:
                 upgraded = await self._get_hashed_password(password)
-                self.user_repo.update_user_password(email=email, new_hashed_password=upgraded)
+                await asyncio.to_thread(self.user_repo.update_user_password, email=email, new_hashed_password=upgraded)
             except Exception as e:
                 print(f"[WARN] Password hash upgrade failed for {email}: {e}")
 
@@ -131,7 +131,7 @@ class CustomAuthService(AuthService):
             if payload.get("type") != expected_type:
                 raise HTTPException(status_code=401, detail="Invalid token type")
 
-            user = self.user_repo.get_user(email=email)
+            user = await asyncio.to_thread(self.user_repo.get_user, email=email)
 
         except JWTError:
             raise HTTPException(status_code=401, detail="Session expired or invalid Token")
@@ -146,7 +146,7 @@ class CustomAuthService(AuthService):
 
     async def activate_user(self, email: str) -> None:
         try:
-            self.user_repo.activate_user(email=email)
+            await asyncio.to_thread(self.user_repo.activate_user, email=email)
         except SupabaseException as e:
             print(f"DB Error activating user {email}: {e}")
             raise HTTPException(status_code=500, detail="Failed to activate user account")
@@ -160,7 +160,7 @@ class CustomAuthService(AuthService):
 
     async def get_user(self, email: str) -> dict:
         try:
-            user = self.user_repo.get_user(email=email)
+            user = await asyncio.to_thread(self.user_repo.get_user, email=email)
             return user
         except SupabaseException as e:
             raise HTTPException(status_code=500, detail="Database error during retrieval")
@@ -170,7 +170,7 @@ class CustomAuthService(AuthService):
     async def update_password(self, email: str, new_password: str) -> None:
         try:
             hashed_password = await self._get_hashed_password(new_password)
-            self.user_repo.update_user_password(email=email, new_hashed_password=hashed_password)
+            await asyncio.to_thread(self.user_repo.update_user_password, email=email, new_hashed_password=hashed_password)
         except SupabaseException as e:
             print(f"DB Error resetting password for {email}: {e}")
             raise HTTPException(status_code=500, detail="Failed to reset password")

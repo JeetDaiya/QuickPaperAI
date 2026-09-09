@@ -1,3 +1,4 @@
+import asyncio
 import secrets
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import OAuth2PasswordRequestForm
@@ -146,7 +147,7 @@ async def save_device_token(
     user_repo: UserRepository = Depends(get_user_repository)
 ):
     user_id = str(current_user["id"])
-    success = user_repo.save_fcm_token(user_id=user_id, token=data.token)
+    success = await asyncio.to_thread(user_repo.save_fcm_token, user_id=user_id, token=data.token)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to save FCM device token.")
     return {"message": "FCM device token registered successfully."}
@@ -160,7 +161,7 @@ async def update_notification_settings(
 ):
     user_id = str(current_user["id"])
     notifications_enabled = notification_toggle_request.notifications_enabled
-    success = user_repo.update_notification_perms(user_id=user_id, notifications_enabled=notifications_enabled)
+    success = await asyncio.to_thread(user_repo.update_notification_perms, user_id=user_id, notifications_enabled=notifications_enabled)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to update notification settings.")
     return {"message": "Notification preferences updated successfully."}
@@ -173,8 +174,8 @@ async def get_notification_settings(
 
 ):
     user_id = str(current_user["id"])
-    token_data = user_repo.get_fcm_token(user_id=user_id)
-    perms_data = user_repo.get_notification_perms(user_id=user_id)
+    token_data = await asyncio.to_thread(user_repo.get_fcm_token, user_id=user_id)
+    perms_data = await asyncio.to_thread(user_repo.get_notification_perms, user_id=user_id)
     
     fcm_token = token_data[0].get("fcm_token") if token_data else None
     notifications_enabled = perms_data[0].get("notifications_enabled", True) if perms_data else True

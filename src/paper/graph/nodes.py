@@ -61,7 +61,7 @@ async def question_generator_node(state: ChapterState, config: RunnableConfig) -
 
     configurable: GraphConfig = config.get("configurable", {})
     chunk_repo = configurable.get("chunk_repo")
-    chapter_chunks = chunk_repo.get_chapter_chunks(subject=subject, chapter=chapter)
+    chapter_chunks = await asyncio.to_thread(chunk_repo.get_chapter_chunks, subject=subject, chapter=chapter)
     topic_batches = group_by_subtopic(chapter_chunks)
 
     progress_tracker: ProgressTracker = configurable.get("progress_tracker")
@@ -226,21 +226,23 @@ async def pdf_node(state: PaperState, config: RunnableConfig):
     answer_html = html_paper_formatter.render_answer_key(paper_request=paper_request, questions=selected_questions)
     paper_md = markdown_paper_formatter.render_paper(paper_request=paper_request, questions=selected_questions)
 
-    try:
-        await document_compiler.generate_pdf(
+    pdf_result, docx_result = await asyncio.gather(
+        document_compiler.generate_pdf(
             paper_html=paper_html,
             answer_html=answer_html,
             paper_output_path=f'{output_dir}/{DocumentType.PAPER_PDF}',
             answer_output_path=f'{output_dir}/{DocumentType.ANSWER_PDF}'
-        )
-    except Exception as e:
-        print(f"[ERROR] Critical Failure: Failed to generate PDF documents: {e}")
-        raise e
-
-    try:
-        await document_compiler.generate_docx(
+        ),
+        document_compiler.generate_docx(
             markdown=paper_md,
             output_path=f'{output_dir}/{DocumentType.PAPER_DOCX}',
-        )
-    except Exception as e:
-        print(f"[WARN] Soft Failure: Failed to generate DOCX document (continuing gracefully): {e}")
+        ),
+        return_exceptions=True
+    )
+
+    if isinstance(pdf_result, Exception):
+        print(f"[ERROR] Critical Failure: Failed to generate PDF documents: {pdf_result}")
+        raise pdf_result
+
+    if isinstance(docx_result, Exception):
+        print(f"[WARN] Soft Failure: Failed to generate DOCX document (continuing gracefully): {docx_result}")
