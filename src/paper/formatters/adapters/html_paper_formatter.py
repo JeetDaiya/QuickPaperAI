@@ -6,9 +6,10 @@ from src.paper.models import QuestionTypes, Question, PaperRequest
 
 class HTMLPaperFormatter(PaperFormatter):
     def _render_question_html(self, q: Question, q_number: int) -> str:
-        """Renders a single question as HTML."""
+        """Renders a single question (with its options/table/diagram) as one page-break-safe block."""
         q_text_formatted = q.question_text.replace("\n", "<br>")
-        html = f'<div class="question"><span class="q-text"><strong>Q{q_number}.</strong> {q_text_formatted}</span>'
+        html = '<div class="question-wrapper">\n'
+        html += f'<div class="question"><span class="q-text"><strong>Q{q_number}.</strong> {q_text_formatted}</span>'
         html += f'<span class="q-marks">[{q.marks}]</span></div>\n'
 
         # Render MCQ options
@@ -53,6 +54,7 @@ class HTMLPaperFormatter(PaperFormatter):
             </div>
             """
 
+        html += '</div>\n'
         return html
 
     def _render_answer_html(self, q: Question, q_number: int) -> str:
@@ -284,14 +286,36 @@ class HTMLPaperFormatter(PaperFormatter):
                     font-weight: bold;
                 }}
 
+                /* ── Watermark ── */
+                .watermark {{
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%) rotate(-35deg);
+                    font-size: 48pt;
+                    font-weight: bold;
+                    color: #000;
+                    opacity: 0.06;
+                    white-space: nowrap;
+                    pointer-events: none;
+                    z-index: -1;
+                }}
+
                 @media print {{
                     body {{
                         padding: 20px 30px;
+                    }}
+
+                    .question-wrapper {{
+                        page-break-inside: avoid;
+                        break-inside: avoid;
                     }}
                 }}
             </style>
         </head>
         <body>
+
+            <div class="watermark">{paper_request.institution_name}</div>
 
             <div class="paper-header">
                 <div class="header-top">
@@ -373,10 +397,10 @@ class HTMLPaperFormatter(PaperFormatter):
         if diagram_questions:
             annex_html += """
                 <div style="page-break-before: always; margin-top: 40px; border-top: 2px solid #000; padding-top: 20px;">
-                    <h2 style="font-size: 15pt; font-weight: bold; color: #0056b3; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 0.5px;">
+                    <h2 class="diagram-annex-heading" style="font-size: 15pt; font-weight: bold; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 0.5px;">
                         📋 DIAGRAM PROMPT ANNEX (FOR TEACHERS ONLY)
                     </h2>
-                    <p style="font-size: 11pt; line-height: 1.5; color: #333; margin-bottom: 20px; background-color: #f8f9fa; border-left: 3px solid #6c757d; padding: 10px 15px;">
+                    <p class="diagram-annex-instruction" style="font-size: 11pt; line-height: 1.5; margin-bottom: 20px; border-left: 3px solid; padding: 10px 15px;">
                         <strong>Instruction:</strong> Copy the descriptive prompts below and paste them into the <strong>Gemini App</strong> or any high-quality image generator. Copy the resulting diagram and paste it into the editable <strong>DOCX</strong> question sheet at the corresponding question placeholder!
                     </p>
                 """
@@ -409,7 +433,7 @@ class HTMLPaperFormatter(PaperFormatter):
                     font-family: 'Times New Roman', serif;
                     font-size: 13pt;
                     line-height: 1.6;
-                    padding: 40px 50px;
+                    padding: 40px 170px 40px 50px;
                     max-width: 210mm;
                     margin: 0 auto;
                     color: #000;
@@ -451,6 +475,7 @@ class HTMLPaperFormatter(PaperFormatter):
                     font-size: 13pt;
                     font-weight: bold;
                     margin-top: 4px;
+                    color: #000;
                 }}
 
                 .header-meta {{
@@ -464,14 +489,72 @@ class HTMLPaperFormatter(PaperFormatter):
                     text-align: right;
                 }}
 
+                /* ── Watermark ── */
+                .watermark {{
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%) rotate(-35deg);
+                    font-size: 48pt;
+                    font-weight: bold;
+                    color: #000;
+                    opacity: 0.06;
+                    white-space: nowrap;
+                    pointer-events: none;
+                    z-index: -1;
+                }}
+
+                /* ── Grading notes gutter (repeats on every printed page) ── */
+                .grading-gutter-line {{
+                    position: fixed;
+                    top: 0;
+                    bottom: 0;
+                    right: 120px;
+                    border-right: 1px dashed #000;
+                }}
+
+                .grading-gutter-label {{
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    font-size: 8pt;
+                    font-weight: bold;
+                    color: #000;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }}
+
+                /* ── Photocopier-friendly contrast: solid black over light/blue accents ── */
+                .answer-box {{
+                    border-left-color: #000 !important;
+                    background-color: #ffffff !important;
+                }}
+
+                .answer-box strong {{
+                    color: #000 !important;
+                }}
+
+                .diagram-annex-heading {{
+                    color: #000;
+                }}
+
+                .diagram-annex-instruction {{
+                    color: #000;
+                    border-left-color: #000;
+                }}
+
                 @media print {{
                     body {{
-                        padding: 20px 30px;
+                        padding: 20px 150px 20px 30px;
                     }}
                 }}
             </style>
         </head>
         <body>
+
+            <div class="watermark">{paper_request.institution_name}</div>
+            <div class="grading-gutter-line"></div>
+            <div class="grading-gutter-label">Notes</div>
 
             <div class="paper-header">
                 <div class="header-top">
@@ -485,7 +568,7 @@ class HTMLPaperFormatter(PaperFormatter):
                     </div>
                 </div>
                 <div class="institution-name">{paper_request.institution_name}</div>
-                <div class="total-marks" style="color: #0056b3;">ANSWER KEY & EVALUATION SCHEME</div>
+                <div class="total-marks">ANSWER KEY & EVALUATION SCHEME</div>
             </div>
 
             {sections_html}
