@@ -60,13 +60,6 @@ If you hit something new and non-obvious, add a line here — don't bury it in a
   re-checks status anyway as a self-healing safety net, so a dropped/mistimed shout costs at most
   ~10s of lag, never a browser tab stuck until manual refresh. Don't turn that timeout back into a
   bare `continue` — that reintroduces the "completed paper needs a refresh" bug.
-- `"awaiting_review"` is only a real terminal state for the review page. The done page opens its
-  own stream right after `POST /resume`, which just enqueues an ARQ job — the checkpoint can still
-  read the stale `awaiting_review` interrupt for a moment before the worker picks the job up.
-  `/status/{thread_id}/stream` takes `wait_past_review` (set by `useGenerationStatus`'s
-  `waitPastReview` option, used on the done page) to keep the stream open past that stale read
-  instead of closing on it — closing there strands the page (blank preview, disabled downloads)
-  until a manual refresh reopens the stream after the resume has actually landed.
 
 ## Frontend
 - `VITE_API_BASE_URL` needs an explicit `http(s)://` prefix or the browser treats API calls as

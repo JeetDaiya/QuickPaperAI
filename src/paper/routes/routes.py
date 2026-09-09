@@ -86,7 +86,7 @@ async def stream_generation_status(
             last_state = current_state
             yield f"data: {current_state}\n\n"
 
-            if status_data.get("status") in close_statuses:
+            if status_data.get("status") in TERMINAL_STATUSES:
                 return
 
             while True:
