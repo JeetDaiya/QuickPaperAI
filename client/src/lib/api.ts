@@ -213,13 +213,14 @@ export const api = {
     return `${API_BASE}${apiPath}`;
   },
 
-  statusStreamUrl: (threadId: string) => {
+  statusStreamUrl: (threadId: string, options?: { waitPastReview?: boolean }) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     const url = `${API_BASE}/api/status/${encodeURIComponent(threadId)}/stream`;
-    if (token) {
-      return `${url}?token=${encodeURIComponent(token)}`;
-    }
-    return url;
+    const params = new URLSearchParams();
+    if (options?.waitPastReview) params.set("wait_past_review", "true");
+    if (token) params.set("token", token);
+    const query = params.toString();
+    return query ? `${url}?${query}` : url;
   }
 };
 

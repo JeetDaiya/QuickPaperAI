@@ -2,7 +2,7 @@ from datetime import date
 
 from src.paper.formatters.interfaces.interface import PaperFormatter
 from src.paper.models import QuestionTypes, Question, PaperRequest
-from src.paper.compilers.generator import SECTION_CONFIG
+from src.paper.compilers.section_config import SECTION_CONFIG
 
 
 class MarkdownPaperFormatter(PaperFormatter):

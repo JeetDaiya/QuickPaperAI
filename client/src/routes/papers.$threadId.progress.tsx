@@ -2,7 +2,6 @@ import { createFileRoute, useNavigate, Link, redirect } from "@tanstack/react-ro
 import { useEffect } from "react";
 import { DeskHeader } from "@/components/desk-header";
 import { api } from "@/lib/api";
-import { updateDraftStatus } from "@/lib/drafts";
 import { useGenerationStatus } from "@/hooks/useGenerationStatus";
 import type { ChapterProgress } from "@/lib/types";
 
@@ -41,7 +40,6 @@ function ProgressPage() {
 
   useEffect(() => {
     if (!data) return;
-    updateDraftStatus(threadId, labelFor(data.status));
     if (data.status === "awaiting_review") {
       navigate({
         to: "/papers/$threadId/review",
@@ -163,14 +161,6 @@ function ProgressPage() {
       </main>
     </div>
   );
-}
-
-function labelFor(s: string) {
-  if (s === "generating") return "Generating";
-  if (s === "awaiting_review") return "Awaiting review";
-  if (s === "completed") return "Ready";
-  if (s === "failed") return "Failed";
-  return s;
 }
 
 function StitchedLedger({ chapters }: { chapters: ChapterProgress[] }) {

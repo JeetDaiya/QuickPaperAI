@@ -1,7 +1,17 @@
+import html
 from datetime import date
-from src.paper.compilers.generator import SECTION_CONFIG
+from src.paper.compilers.section_config import SECTION_CONFIG
 from src.paper.formatters.interfaces.interface import  PaperFormatter
 from src.paper.models import QuestionTypes, Question, PaperRequest
+
+
+def _safe(text) -> str:
+    """Escape user/LLM-controlled text before interpolating it into the PDF HTML, so a value
+    like `<iframe src="file:///etc/passwd">` renders as literal text instead of being fetched by
+    the headless Chromium that compiles the PDF (SSRF / local-file-inclusion). Math still works:
+    the browser decodes the entities back into real characters in the DOM before KaTeX's
+    renderMathInElement reads them, so `$x < 5$` escaped to `$x &lt; 5$` renders correctly."""
+    return html.escape(str(text)) if text is not None else ""
 
 
 class HTMLPaperFormatter(PaperFormatter):
@@ -21,9 +31,9 @@ class HTMLPaperFormatter(PaperFormatter):
                 opt_stripped = opt.strip()
                 # If the option already starts with an option prefix like "(a)", "a.", "a)" (case-insensitive)
                 if re.match(r'^[\(\[a-dA-D]?[a-dA-D][\)\.\s]\s*', opt_stripped):
-                    html += f'  <span class="option">{opt_stripped}</span>\n'
+                    html += f'  <span class="option">{_safe(opt_stripped)}</span>\n'
                 else:
-                    html += f'  <span class="option">({label}) {opt_stripped}</span>\n'
+                    html += f'  <span class="option">({label}) {_safe(opt_stripped)}</span>\n'
             html += '</div>\n'
 
         # Render Match the Column as a table
@@ -35,15 +45,15 @@ class HTMLPaperFormatter(PaperFormatter):
                 for opt in q.options:
                     if "|" in opt:
                         col_a, col_b = opt.split("|", 1)
-                        html += f'<tr><td>{col_a.strip()}</td><td>{col_b.strip()}</td></tr>\n'
+                        html += f'<tr><td>{_safe(col_a.strip())}</td><td>{_safe(col_b.strip())}</td></tr>\n'
                     else:
-                        html += f'<tr><td colspan="2">{opt}</td></tr>\n'
+                        html += f'<tr><td colspan="2">{_safe(opt)}</td></tr>\n'
                 html += '</table>\n'
             else:
                 html += '<div class="options">\n'
                 for i, opt in enumerate(q.options):
                     label = chr(97 + i)
-                    html += f'  <span class="option">({label}) {opt}</span>\n'
+                    html += f'  <span class="option">({label}) {_safe(opt)}</span>\n'
                 html += '</div>\n'
 
         # Render diagram placeholder if present
@@ -61,7 +71,7 @@ class HTMLPaperFormatter(PaperFormatter):
         """Renders a single question and its structured answer key as HTML."""
         html = f'<div class="question-block" style="margin-bottom: 20px; page-break-inside: avoid;">'
         html += f'  <div class="question" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">'
-        html += f'    <span class="q-text" style="flex: 1; padding-right: 16px;"><strong>Q{q_number}.</strong> {q.question_text}</span>'
+        html += f'    <span class="q-text" style="flex: 1; padding-right: 16px;"><strong>Q{q_number}.</strong> {_safe(q.question_text)}</span>'
         html += f'    <span class="q-marks" style="white-space: nowrap; font-weight: bold; min-width: 35px; text-align: right;">[{q.marks} Marks]</span>'
         html += f'  </div>'
 
@@ -72,7 +82,7 @@ class HTMLPaperFormatter(PaperFormatter):
             formatted_ans += '<ul class="answer-list" style="margin-left: 20px; padding-left: 10px; list-style-type: disc;">\n'
             for pt in q.evaluation_scheme:
                 marks_suffix = f" [{pt.allocated_marks} Mark{'s' if pt.allocated_marks > 1 else ''}]"
-                formatted_ans += f'  <li style="margin-bottom: 4px;">{pt.point_text}<strong>{marks_suffix}</strong></li>\n'
+                formatted_ans += f'  <li style="margin-bottom: 4px;">{_safe(pt.point_text)}<strong>{marks_suffix}</strong></li>\n'
             formatted_ans += '</ul>\n'
         else:
             # Fallback to correct_answer string parsing
@@ -85,10 +95,10 @@ class HTMLPaperFormatter(PaperFormatter):
                     if line_str.startswith("-"):
                         line_str = line_str.lstrip("-").strip()
                     if line_str:
-                        formatted_ans += f'  <li style="margin-bottom: 4px;">{line_str}</li>\n'
+                        formatted_ans += f'  <li style="margin-bottom: 4px;">{_safe(line_str)}</li>\n'
                 formatted_ans += '</ul>\n'
             else:
-                formatted_ans = f'<p style="margin: 0; line-height: 1.5;">{ans_content.replace(chr(10), "<br>")}</p>'
+                formatted_ans = f'<p style="margin: 0; line-height: 1.5;">{_safe(ans_content).replace(chr(10), "<br>")}</p>'
 
         html += f'  <div class="answer-box" style="margin-left: 24px; padding: 10px 15px; border-left: 3px solid #0056b3; background-color: #f8f9fa; border-radius: 0 4px 4px 0;">'
         html += f'    <strong style="color: #0056b3; font-size: 11pt; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px;">Evaluation & Marking Scheme:</strong>'
@@ -104,7 +114,7 @@ class HTMLPaperFormatter(PaperFormatter):
         """
         total_marks = sum(q.marks for q in questions)
         today = date.today().strftime("%d-%m-%Y")
-        chapters_str = ", ".join(paper_request.chapters)
+        chapters_str = ", ".join(_safe(c) for c in paper_request.chapters)
 
         # Group questions by type
         grouped: dict[QuestionTypes, list[Question]] = {}
@@ -145,7 +155,7 @@ class HTMLPaperFormatter(PaperFormatter):
         <html lang="en">
         <head>
             <meta charset="UTF-8">
-            <title>{paper_request.subject} - Question Paper</title>
+            <title>{_safe(paper_request.subject)} - Question Paper</title>
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
             <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
             <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
@@ -320,15 +330,15 @@ class HTMLPaperFormatter(PaperFormatter):
             <div class="paper-header">
                 <div class="header-top">
                     <div class="header-left">
-                        <div class="header-meta"><strong>Subject:</strong> {paper_request.subject}</div>
-                        <div class="header-meta"><strong>Standard:</strong> {paper_request.standard}</div>
+                        <div class="header-meta"><strong>Subject:</strong> {_safe(paper_request.subject)}</div>
+                        <div class="header-meta"><strong>Standard:</strong> {_safe(paper_request.standard)}</div>
                     </div>
                     <div class="header-right">
                         <div class="header-meta"><strong>Date:</strong> {today}</div>
                         <div class="header-meta"><strong>Chapters:</strong> {chapters_str}</div>
                     </div>
                 </div>
-                <div class="institution-name">{paper_request.institution_name}</div>
+                <div class="institution-name">{_safe(paper_request.institution_name)}</div>
                 <div class="total-marks">Total Marks: {total_marks}</div>
             </div>
 
@@ -358,7 +368,7 @@ class HTMLPaperFormatter(PaperFormatter):
         """
         total_marks = sum(q.marks for q in questions)
         today = date.today().strftime("%d-%m-%Y")
-        chapters_str = ", ".join(paper_request.chapters)
+        chapters_str = ", ".join(_safe(c) for c in paper_request.chapters)
 
         # Group questions by type
         grouped: dict[QuestionTypes, list[Question]] = {}
@@ -408,7 +418,7 @@ class HTMLPaperFormatter(PaperFormatter):
                 annex_html += f"""
                     <div style="margin-bottom: 20px; background-color: #ffffff; border: 1px solid #ddd; border-radius: 4px; padding: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); page-break-inside: avoid;">
                         <strong style="font-size: 11pt; color: #333; display: block; margin-bottom: 6px;">Q{q_num} Diagram Generation Prompt:</strong>
-                        <div style="font-size: 11pt; font-family: monospace; background-color: #f4f4f4; padding: 10px; border-radius: 4px; border: 1px solid #ccc; white-space: pre-wrap; word-break: break-all; user-select: all;">{q.diagram_prompt}</div>
+                        <div style="font-size: 11pt; font-family: monospace; background-color: #f4f4f4; padding: 10px; border-radius: 4px; border: 1px solid #ccc; white-space: pre-wrap; word-break: break-all; user-select: all;">{_safe(q.diagram_prompt)}</div>
                     </div>
                     """
             annex_html += "</div>\n"
@@ -418,7 +428,7 @@ class HTMLPaperFormatter(PaperFormatter):
         <html lang="en">
         <head>
             <meta charset="UTF-8">
-            <title>Answer Key: {paper_request.subject}</title>
+            <title>Answer Key: {_safe(paper_request.subject)}</title>
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
             <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
             <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
@@ -559,16 +569,16 @@ class HTMLPaperFormatter(PaperFormatter):
             <div class="paper-header">
                 <div class="header-top">
                     <div class="header-left">
-                        <div class="header-meta"><strong>Subject:</strong> {paper_request.subject}</div>
-                        <div class="header-meta"><strong>Standard:</strong> {paper_request.standard}</div>
+                        <div class="header-meta"><strong>Subject:</strong> {_safe(paper_request.subject)}</div>
+                        <div class="header-meta"><strong>Standard:</strong> {_safe(paper_request.standard)}</div>
                     </div>
                     <div class="header-right">
                         <div class="header-meta"><strong>Date:</strong> {today}</div>
                         <div class="header-meta"><strong>Chapters:</strong> {chapters_str}</div>
                     </div>
                 </div>
-                <div class="institution-name">{paper_request.institution_name}</div>
-                <div class="total-marks">ANSWER KEY & EVALUATION SCHEME</div>
+                <div class="institution-name">{_safe(paper_request.institution_name)}</div>
+                <div class="total-marks" style="color: #0056b3;">ANSWER KEY & EVALUATION SCHEME</div>
             </div>
 
             {sections_html}
