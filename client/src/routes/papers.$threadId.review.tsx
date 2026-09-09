@@ -1,8 +1,10 @@
 import { createFileRoute, useNavigate, redirect } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { DeskHeader } from "@/components/desk-header";
 import { api } from "@/lib/api";
 import { useGenerationStatus } from "@/hooks/useGenerationStatus";
+import { syncStatus } from "@/lib/paper-status";
 import {
   isObjective,
   SECTION_ORDER,
@@ -158,6 +160,7 @@ interface IndexedCandidate {
 function ReviewPage() {
   const { threadId } = Route.useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [activeChapter, setActiveChapter] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -223,6 +226,7 @@ function ReviewPage() {
       await api.resume(threadId, {
         selected_indices: Array.from(selected).sort((a, b) => a - b),
       });
+      syncStatus(queryClient, threadId, { status: "generating", progress: {} });
       navigate({
         to: "/papers/$threadId/done",
         params: { threadId },

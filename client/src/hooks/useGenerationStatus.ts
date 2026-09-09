@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { syncStatus } from "@/lib/paper-status";
 import type { StatusResponse } from "@/lib/types";
 
 export interface UseGenerationStatusReturn {
@@ -19,6 +21,7 @@ export function useGenerationStatus(
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const eventSourceRef = useRef<EventSource | null>(null);
   const waitPastReview = options?.waitPastReview ?? false;
+  const queryClient = useQueryClient();
 
   // Terminal statuses that should stop streaming. A page that just submitted /resume (e.g. the
   // done page) must not treat "awaiting_review" as terminal — the checkpoint can still read that
@@ -52,6 +55,14 @@ export function useGenerationStatus(
           const parsed: StatusResponse = JSON.parse(event.data);
           setData(parsed);
           setIsLoading(false);
+
+          // Skip a stale "awaiting_review" checkpoint tick when waiting past review (see
+          // isTerminal) — it isn't authoritative here and would clobber a more correct status
+          // written elsewhere (e.g. review.tsx's optimistic "Generating" write right before
+          // navigating to this page).
+          if (!(waitPastReview && parsed.status === "awaiting_review")) {
+            syncStatus(queryClient, threadId, parsed);
+          }
 
           if (isTerminal(parsed.status)) {
             setIsStreaming(false);
