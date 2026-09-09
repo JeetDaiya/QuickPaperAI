@@ -3,13 +3,13 @@ from langchain_groq import ChatGroq
 from src.base_settings import settings
 
 
-MAIN_AI_MODEL = "gemini-3.5-flash"
+MAIN_AI_MODEL = "gemini-3.8-flash"
 SUPABASE_KEY=settings.SUPABASE_KEY
 SUPABASE_SERVICE_ROLE_KEY=settings.SUPABASE_SERVICE_ROLE_KEY
 SUPABASE_URL=settings.SUPABASE_URL
 
 
-ALTERNATE_GOOGLE_AI_MODELS = ["gemini-3.1-flash-lite", "gemini-2.5-flash"]
+ALTERNATE_GOOGLE_AI_MODELS = ["gemini-3.7-flash", "gemini-3.6-flash","gemini-3.5-flash", "gemini-3.5-flash-lite",  "gemini-3.1-flash-lite", "gemini-3-flash", "gemini-2.5-flash", "gemma-4-31b-it"]
 ALTERNATE_GROQ_MODELS = ["llama-3.3-70b-versatile", "openai/gpt-oss-120b"]
 
 

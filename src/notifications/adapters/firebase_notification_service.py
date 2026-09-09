@@ -1,3 +1,5 @@
+import asyncio
+
 import firebase_admin
 from firebase_admin import credentials, messaging
 from src.base_settings import settings
@@ -33,7 +35,7 @@ class FirebaseNotificationService:
                 webpush=messaging.WebpushConfig(**webpush_kwargs) if webpush_kwargs else None
             )
             
-            messaging.send(message_payload)
+            await asyncio.to_thread(messaging.send, message_payload)
             print(f"[INFO] FCM notification sent successfully for thread {thread_id}")
             return True
         except Exception as e:
