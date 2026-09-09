@@ -20,25 +20,30 @@ class CustomDocumentCompiler(DocumentCompiler):
                 paper_page = await browser.new_page()
                 answer_page = await browser.new_page()
 
-                await paper_page.set_content(paper_html)
-                await answer_page.set_content(answer_html)
+                await asyncio.gather(
+                    paper_page.set_content(paper_html),
+                    answer_page.set_content(answer_html),
+                )
 
                 try:
-                    await paper_page.wait_for_load_state("load", timeout=15000)
-                    await answer_page.wait_for_load_state("load", timeout=15000)
+                    await asyncio.gather(
+                        paper_page.wait_for_load_state("load", timeout=15000),
+                        answer_page.wait_for_load_state("load", timeout=15000),
+                    )
                 except Exception as err:
                     print(f"[WARN] Playwright load state timeout (proceeding to generate PDF): {err}")
 
-                await paper_page.pdf(
-                    path=paper_output_path,
-                    format="A4",
-                    print_background=True,
-                )
-
-                await answer_page.pdf(
-                    path=answer_output_path,
-                    format="A4",
-                    print_background=True
+                await asyncio.gather(
+                    paper_page.pdf(
+                        path=paper_output_path,
+                        format="A4",
+                        print_background=True,
+                    ),
+                    answer_page.pdf(
+                        path=answer_output_path,
+                        format="A4",
+                        print_background=True
+                    ),
                 )
             finally:
                 await browser.close()

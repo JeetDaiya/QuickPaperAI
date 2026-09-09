@@ -1,3 +1,4 @@
+import asyncio
 import os
 import uuid
 from typing import Optional
@@ -13,9 +14,15 @@ from src.db.interfaces.interface import PaperRepository, ChunkRepository, UserRe
 from src.paper.compilers.interfaces.interface import DocumentCompiler
 from src.paper.formatters.interfaces.interface import PaperFormatter
 from src.storage.interfaces.interface import StorageService
-from src.paper.models import PaperRequest, ChapterStatus, DocumentType
+from src.paper.models import PaperRequest, ChapterStatus, DocumentType, GENERATED_DOCUMENT_TYPES
 from src.paper.task_manager import TaskManager
 from src.notifications.adapters.firebase_notification_service import FirebaseNotificationService
+
+
+def _content_type_for(filename: str) -> str:
+    if filename.endswith(".pdf"):
+        return "application/pdf"
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
 class PaperService:
@@ -56,7 +63,7 @@ class PaperService:
         raw_req = snapshot.values.get("paper_request")
         paper_request = raw_req if isinstance(raw_req, PaperRequest) else PaperRequest(**raw_req)
 
-        filenames = [DocumentType.PAPER_PDF, DocumentType.ANSWER_PDF, DocumentType.PAPER_DOCX]
+        filenames = GENERATED_DOCUMENT_TYPES
         file_paths = {}
 
         try:
@@ -64,13 +71,14 @@ class PaperService:
             files_data = {}
             for filename in filenames:
                 relative_path = f"{thread_id}/{filename}"
-                files_data[filename] = self.local_storage.get_file(file_path=relative_path)
+                files_data[filename] = await asyncio.to_thread(self.local_storage.get_file, file_path=relative_path)
 
             # 2. Upload compiled artifacts to Cloud Storage
             for filename, file_bytes in files_data.items():
                 storage_path = f"{thread_id}/{filename}"
-                content_type = "application/pdf" if filename.endswith(".pdf") else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                self.cloud_storage.put_file(
+                content_type = _content_type_for(filename)
+                await asyncio.to_thread(
+                    self.cloud_storage.put_file,
                     file_path=storage_path,
                     file_data=file_bytes,
                     content_type=content_type
@@ -86,7 +94,7 @@ class PaperService:
                 status=Status.SAVED,
                 file_paths=file_paths
             )
-            self.paper_repo.update_paper_session(thread_id=thread_id, paper_record=paper_record)
+            await asyncio.to_thread(self.paper_repo.update_paper_session, thread_id=thread_id, paper_record=paper_record)
             print(f"[INFO] Successfully synced metadata for thread {thread_id} to generated_papers DB table!")
             return {"status": "success"}
 
@@ -101,14 +109,14 @@ class PaperService:
                 status=Status.FAILED
             )
             try:
-                self.paper_repo.update_paper_session(thread_id=thread_id, paper_record=failed_record)
+                await asyncio.to_thread(self.paper_repo.update_paper_session, thread_id=thread_id, paper_record=failed_record)
             except Exception as update_err:
                 print(f"[WARN] Failed to update session status to FAILED in DB: {update_err}")
 
             # Rollback any uploaded cloud files
             for storage_path in file_paths.values():
                 try:
-                    self.cloud_storage.delete_file(file_path=storage_path)
+                    await asyncio.to_thread(self.cloud_storage.delete_file, file_path=storage_path)
                 except Exception:
                     pass
 
@@ -119,11 +127,11 @@ class PaperService:
         local_path = f"{output_dir}/{filename}"
 
         is_pdf = filename.endswith('.pdf')
-        response_media_type = 'application/pdf' if is_pdf else 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        response_media_type = _content_type_for(filename)
         disposition = 'inline' if (preview and is_pdf) else 'attachment'
         response_filename = filename if not (preview and is_pdf) else None
 
-        if self.local_storage.exists(file_path=f"{thread_id}/{filename}"):
+        if await asyncio.to_thread(self.local_storage.exists, file_path=f"{thread_id}/{filename}"):
             return FileResponse(local_path, media_type=response_media_type, filename=response_filename)
 
         print(f"[INFO] Cache miss: Local file outputs/{thread_id}/{filename} not found. Attempting cloud recovery...")
@@ -139,7 +147,7 @@ class PaperService:
             raise HTTPException(status_code=400, detail="Invalid filename")
 
         try:
-            response = self.paper_repo.get_paper_metadata(thread_id=thread_id, paper_name=target_column)
+            response = await asyncio.to_thread(self.paper_repo.get_paper_metadata, thread_id=thread_id, paper_name=target_column)
             if not response.data:
                 raise HTTPException(status_code=404, detail="Paper session record not found in database.")
 
@@ -147,8 +155,8 @@ class PaperService:
             if not file_path:
                 raise HTTPException(status_code=404, detail=f"{filename} not found in database.")
 
-            file_bytes = self.cloud_storage.get_file(file_path)
-            self.local_storage.put_file(file_data=file_bytes, file_path=f"{thread_id}/{filename}")
+            file_bytes = await asyncio.to_thread(self.cloud_storage.get_file, file_path)
+            await asyncio.to_thread(self.local_storage.put_file, file_data=file_bytes, file_path=f"{thread_id}/{filename}")
 
             print(f"[INFO] Recovered and hot-cached {filename} successfully from Supabase Storage.")
             return FileResponse(local_path, media_type=response_media_type, filename=response_filename)
@@ -163,32 +171,10 @@ class PaperService:
             await self.task_manager.cancel_task(thread_id=thread_id)
             await self.progress_tracker.delete_progress(thread_id=thread_id)
 
-            try:
-                async with db_pool.connection() as conn:
-                    async with conn.transaction():
-                        async with conn.cursor() as cur:
-                            for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
-                                await cur.execute(f"DELETE FROM {table} WHERE thread_id = %s", (thread_id,))
-                print(f"[INFO] Cleaned all checkpointer DB entries for thread {thread_id}")
-            except Exception as dbe:
-                print(f"[WARN] Could not clean Postgres checkpoints from Saver: {dbe}")
-
-            try:
-                self.paper_repo.delete_paper_metadata(thread_id=thread_id)
-            except Exception as sqle:
-                print(f"[WARN] Could not delete generated_papers metadata: {sqle}")
-
-            try:
-                self.cloud_storage.delete_file(file_path=f"{thread_id}/{DocumentType.PAPER_PDF}")
-                self.cloud_storage.delete_file(file_path=f"{thread_id}/{DocumentType.ANSWER_PDF}")
-                self.cloud_storage.delete_file(file_path=f"{thread_id}/{DocumentType.PAPER_DOCX}")
-            except Exception as storee:
-                print(f"[WARN] Cloud storage assets not found or could not be removed: {storee}")
-
-            local_dir = f"outputs/{thread_id}"
-            if self.local_storage.exists(file_path=f"{thread_id}/{DocumentType.PAPER_PDF}"):
-                self.local_storage.delete_file(file_path=f"{thread_id}/{DocumentType.PAPER_PDF}")
-                print(f"[INFO] Purged local server caches: {local_dir}")
+            await self._cleanup_checkpoints(db_pool, thread_id)
+            await self._cleanup_paper_metadata(thread_id)
+            await self._cleanup_cloud_files(thread_id)
+            await self._cleanup_local_cache(thread_id)
 
             return {
                 "status": "cancelled",
@@ -197,6 +183,35 @@ class PaperService:
         except Exception as e:
             print(f"[ERROR] Error during active session cancellation: {e}")
             raise HTTPException(status_code=500, detail="Failed to cancel and clean up generation session")
+
+    async def _cleanup_checkpoints(self, db_pool: Database, thread_id: str) -> None:
+        try:
+            async with db_pool.connection() as conn:
+                async with conn.transaction():
+                    async with conn.cursor() as cur:
+                        for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
+                            await cur.execute(f"DELETE FROM {table} WHERE thread_id = %s", (thread_id,))
+            print(f"[INFO] Cleaned all checkpointer DB entries for thread {thread_id}")
+        except Exception as e:
+            print(f"[WARN] Could not clean Postgres checkpoints from Saver: {e}")
+
+    async def _cleanup_paper_metadata(self, thread_id: str) -> None:
+        try:
+            await asyncio.to_thread(self.paper_repo.delete_paper_metadata, thread_id=thread_id)
+        except Exception as e:
+            print(f"[WARN] Could not delete generated_papers metadata: {e}")
+
+    async def _cleanup_cloud_files(self, thread_id: str) -> None:
+        try:
+            for filename in GENERATED_DOCUMENT_TYPES:
+                await asyncio.to_thread(self.cloud_storage.delete_file, file_path=f"{thread_id}/{filename}")
+        except Exception as e:
+            print(f"[WARN] Cloud storage assets not found or could not be removed: {e}")
+
+    async def _cleanup_local_cache(self, thread_id: str) -> None:
+        if await asyncio.to_thread(self.local_storage.exists, file_path=f"{thread_id}/{DocumentType.PAPER_PDF}"):
+            await asyncio.to_thread(self.local_storage.delete_file, file_path=f"{thread_id}/{DocumentType.PAPER_PDF}")
+            print(f"[INFO] Purged local server caches: outputs/{thread_id}")
 
     async def get_generation_status(self, thread_id: str, agent: CompiledStateGraph, user_id: str):
         config = {"configurable": {"thread_id": thread_id}}
@@ -238,7 +253,7 @@ class PaperService:
             }
 
         if not snapshot.next or not snapshot.tasks:
-            if self.local_storage.exists(file_path=f"{thread_id}/{DocumentType.PAPER_PDF}"):
+            if await asyncio.to_thread(self.local_storage.exists, file_path=f"{thread_id}/{DocumentType.PAPER_PDF}"):
                 return {
                     "status": "completed",
                     "files": {
@@ -273,7 +288,7 @@ class PaperService:
             status=Status.GENERATING
         )
 
-        self.paper_repo.create_paper_session(paper_record=paper_record)
+        await asyncio.to_thread(self.paper_repo.create_paper_session, paper_record=paper_record)
 
         await self.progress_tracker.update_chapters_progress(
             thread_id=thread_id,

@@ -1,3 +1,4 @@
+import asyncio
 from typing import Optional
 
 from src.notifications.adapters.firebase_notification_service import FirebaseNotificationService
@@ -105,7 +106,7 @@ async def generate_paper_task(
                         user_id="",
                         status=Status.FAILED
                     )
-                    paper_repo.update_paper_session(thread_id=thread_id, paper_record=record)
+                    await asyncio.to_thread(paper_repo.update_paper_session, thread_id=thread_id, paper_record=record)
                 except Exception as repo_err:
                     print(f"[WARN] Failed to update paper session status in DB to FAILED: {repo_err}")
 

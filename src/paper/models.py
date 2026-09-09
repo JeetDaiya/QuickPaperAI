@@ -28,6 +28,9 @@ class DocumentType(StrEnum):
     PAPER_DOCX = "paper.docx"
 
 
+GENERATED_DOCUMENT_TYPES = (DocumentType.PAPER_PDF, DocumentType.ANSWER_PDF, DocumentType.PAPER_DOCX)
+
+
 class SubjectType(StrEnum):
     SCIENCE = "science"
     SS = "ss"

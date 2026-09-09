@@ -1,3 +1,4 @@
+import asyncio
 from typing import Optional
 from contextlib import asynccontextmanager
 from functools import lru_cache
@@ -273,7 +274,7 @@ async def verify_thread_ownership(
     user_id = extract_user_id(current_user)
 
     try:
-        session = paper_repo.get_paper_session(thread_id=thread_id)
+        session = await asyncio.to_thread(paper_repo.get_paper_session, thread_id=thread_id)
         if not session or str(session.user_id) != user_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied. You do not own this paper session.")
     except Exception as e:
