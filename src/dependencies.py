@@ -242,9 +242,10 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     
-    if not token:
+
+    if not token and (request.url.path.endswith("/stream") or "/download/" in request.url.path):
         token = request.query_params.get("token")
-        
+
     if not token:
         raise credentials_exception
     

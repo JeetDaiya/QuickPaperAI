@@ -6,7 +6,6 @@ from arq.connections import RedisSettings
 
 from src.base_settings import settings
 from src.dependencies import (
-    get_paper_service,
     get_notification_service,
     get_progress_tracker,
     get_chunk_repository,
@@ -71,7 +70,6 @@ class WorkerSettings:
         ctx["db_pool"] = pool
         ctx["checkpointer"] = checkpointer
         ctx["agent"] = compiled_agent
-        ctx["paper_service"] = get_paper_service()
         ctx["notification_service"] = get_notification_service()
         ctx["progress_tracker"] = get_progress_tracker()
         ctx["chunk_repo"] = get_chunk_repository()

@@ -9,16 +9,23 @@ export interface UseGenerationStatusReturn {
   isStreaming: boolean;
 }
 
-export function useGenerationStatus(threadId: string): UseGenerationStatusReturn {
+export function useGenerationStatus(
+  threadId: string,
+  options?: { waitPastReview?: boolean },
+): UseGenerationStatusReturn {
   const [data, setData] = useState<StatusResponse | undefined>(undefined);
   const [error, setError] = useState<Error | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const waitPastReview = options?.waitPastReview ?? false;
 
-  // Terminal statuses that should stop streaming
+  // Terminal statuses that should stop streaming. A page that just submitted /resume (e.g. the
+  // done page) must not treat "awaiting_review" as terminal — the checkpoint can still read that
+  // stale interrupt for a moment before the worker picks up the resume job, and stopping here
+  // would strand the page until a manual refresh reopens the stream.
   const isTerminal = (s?: string) =>
-    s === "completed" || s === "failed" || s === "awaiting_review";
+    s === "completed" || s === "failed" || (!waitPastReview && s === "awaiting_review");
 
   useEffect(() => {
     if (!threadId || typeof window === "undefined") return;
@@ -28,7 +35,7 @@ export function useGenerationStatus(threadId: string): UseGenerationStatusReturn
     setError(null);
 
     try {
-      const streamUrl = api.statusStreamUrl(threadId);
+      const streamUrl = api.statusStreamUrl(threadId, { waitPastReview });
       const es = new EventSource(streamUrl);
       eventSourceRef.current = es;
 
@@ -85,7 +92,7 @@ export function useGenerationStatus(threadId: string): UseGenerationStatusReturn
         eventSourceRef.current = null;
       }
     };
-  }, [threadId]);
+  }, [threadId, waitPastReview]);
 
   return {
     data,
