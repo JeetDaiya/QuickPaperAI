@@ -9,28 +9,29 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as VerifyOtpRouteImport } from './routes/verify-otp'
-import { Route as SignupRouteImport } from './routes/signup'
-import { Route as NewRouteImport } from './routes/new'
-import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as PapersThreadIdReviewRouteImport } from './routes/papers.$threadId.review'
-import { Route as PapersThreadIdProgressRouteImport } from './routes/papers.$threadId.progress'
-import { Route as PapersThreadIdDoneRouteImport } from './routes/papers.$threadId.done'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as SignupRouteImport } from './routes/signup'
+import { Route as VerifyOtpRouteImport } from './routes/verify-otp'
+import { Route as GenerateThreadIdRouteImport } from './routes/generate.$threadId'
+import { Route as GenerateSetupRouteImport } from './routes/generate.setup'
 
-const VerifyOtpRoute = VerifyOtpRouteImport.update({
-  id: '/verify-otp',
-  path: '/verify-otp',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SignupRoute = SignupRouteImport.update({
-  id: '/signup',
-  path: '/signup',
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
-const NewRoute = NewRouteImport.update({
-  id: '/new',
-  path: '/new',
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -38,123 +39,135 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PapersThreadIdReviewRoute = PapersThreadIdReviewRouteImport.update({
-  id: '/papers/$threadId/review',
-  path: '/papers/$threadId/review',
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PapersThreadIdProgressRoute = PapersThreadIdProgressRouteImport.update({
-  id: '/papers/$threadId/progress',
-  path: '/papers/$threadId/progress',
+const VerifyOtpRoute = VerifyOtpRouteImport.update({
+  id: '/verify-otp',
+  path: '/verify-otp',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PapersThreadIdDoneRoute = PapersThreadIdDoneRouteImport.update({
-  id: '/papers/$threadId/done',
-  path: '/papers/$threadId/done',
+const GenerateThreadIdRoute = GenerateThreadIdRouteImport.update({
+  id: '/generate/$threadId',
+  path: '/generate/$threadId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GenerateSetupRoute = GenerateSetupRouteImport.update({
+  id: '/generate/setup',
+  path: '/generate/setup',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
-  '/new': typeof NewRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/verify-otp': typeof VerifyOtpRoute
-  '/papers/$threadId/done': typeof PapersThreadIdDoneRoute
-  '/papers/$threadId/progress': typeof PapersThreadIdProgressRoute
-  '/papers/$threadId/review': typeof PapersThreadIdReviewRoute
+  '/generate/$threadId': typeof GenerateThreadIdRoute
+  '/generate/setup': typeof GenerateSetupRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
-  '/new': typeof NewRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/verify-otp': typeof VerifyOtpRoute
-  '/papers/$threadId/done': typeof PapersThreadIdDoneRoute
-  '/papers/$threadId/progress': typeof PapersThreadIdProgressRoute
-  '/papers/$threadId/review': typeof PapersThreadIdReviewRoute
+  '/generate/$threadId': typeof GenerateThreadIdRoute
+  '/generate/setup': typeof GenerateSetupRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
-  '/new': typeof NewRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/verify-otp': typeof VerifyOtpRoute
-  '/papers/$threadId/done': typeof PapersThreadIdDoneRoute
-  '/papers/$threadId/progress': typeof PapersThreadIdProgressRoute
-  '/papers/$threadId/review': typeof PapersThreadIdReviewRoute
+  '/generate/$threadId': typeof GenerateThreadIdRoute
+  '/generate/setup': typeof GenerateSetupRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/dashboard'
+    | '/forgot-password'
     | '/login'
-    | '/new'
+    | '/reset-password'
     | '/signup'
     | '/verify-otp'
-    | '/papers/$threadId/done'
-    | '/papers/$threadId/progress'
-    | '/papers/$threadId/review'
+    | '/generate/$threadId'
+    | '/generate/setup'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/dashboard'
+    | '/forgot-password'
     | '/login'
-    | '/new'
+    | '/reset-password'
     | '/signup'
     | '/verify-otp'
-    | '/papers/$threadId/done'
-    | '/papers/$threadId/progress'
-    | '/papers/$threadId/review'
+    | '/generate/$threadId'
+    | '/generate/setup'
   id:
     | '__root__'
     | '/'
+    | '/dashboard'
+    | '/forgot-password'
     | '/login'
-    | '/new'
+    | '/reset-password'
     | '/signup'
     | '/verify-otp'
-    | '/papers/$threadId/done'
-    | '/papers/$threadId/progress'
-    | '/papers/$threadId/review'
+    | '/generate/$threadId'
+    | '/generate/setup'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DashboardRoute: typeof DashboardRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
-  NewRoute: typeof NewRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
   VerifyOtpRoute: typeof VerifyOtpRoute
-  PapersThreadIdDoneRoute: typeof PapersThreadIdDoneRoute
-  PapersThreadIdProgressRoute: typeof PapersThreadIdProgressRoute
-  PapersThreadIdReviewRoute: typeof PapersThreadIdReviewRoute
+  GenerateThreadIdRoute: typeof GenerateThreadIdRoute
+  GenerateSetupRoute: typeof GenerateSetupRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/verify-otp': {
-      id: '/verify-otp'
-      path: '/verify-otp'
-      fullPath: '/verify-otp'
-      preLoaderRoute: typeof VerifyOtpRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/signup': {
-      id: '/signup'
-      path: '/signup'
-      fullPath: '/signup'
-      preLoaderRoute: typeof SignupRouteImport
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/new': {
-      id: '/new'
-      path: '/new'
-      fullPath: '/new'
-      preLoaderRoute: typeof NewRouteImport
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -164,32 +177,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/papers/$threadId/review': {
-      id: '/papers/$threadId/review'
-      path: '/papers/$threadId/review'
-      fullPath: '/papers/$threadId/review'
-      preLoaderRoute: typeof PapersThreadIdReviewRouteImport
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/papers/$threadId/progress': {
-      id: '/papers/$threadId/progress'
-      path: '/papers/$threadId/progress'
-      fullPath: '/papers/$threadId/progress'
-      preLoaderRoute: typeof PapersThreadIdProgressRouteImport
+    '/verify-otp': {
+      id: '/verify-otp'
+      path: '/verify-otp'
+      fullPath: '/verify-otp'
+      preLoaderRoute: typeof VerifyOtpRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/papers/$threadId/done': {
-      id: '/papers/$threadId/done'
-      path: '/papers/$threadId/done'
-      fullPath: '/papers/$threadId/done'
-      preLoaderRoute: typeof PapersThreadIdDoneRouteImport
+    '/generate/$threadId': {
+      id: '/generate/$threadId'
+      path: '/generate/$threadId'
+      fullPath: '/generate/$threadId'
+      preLoaderRoute: typeof GenerateThreadIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/generate/setup': {
+      id: '/generate/setup'
+      path: '/generate/setup'
+      fullPath: '/generate/setup'
+      preLoaderRoute: typeof GenerateSetupRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -197,24 +217,15 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DashboardRoute: DashboardRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
-  NewRoute: NewRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
   VerifyOtpRoute: VerifyOtpRoute,
-  PapersThreadIdDoneRoute: PapersThreadIdDoneRoute,
-  PapersThreadIdProgressRoute: PapersThreadIdProgressRoute,
-  PapersThreadIdReviewRoute: PapersThreadIdReviewRoute,
+  GenerateThreadIdRoute: GenerateThreadIdRoute,
+  GenerateSetupRoute: GenerateSetupRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
