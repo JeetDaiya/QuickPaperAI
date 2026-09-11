@@ -6,7 +6,7 @@ import type { PaperHistory } from "@/lib/api/types";
 
 export interface DashboardPageProps {
   teacherName?: string;
-  schoolName?: string;
+  userEmail?: string;
   history: PaperHistory[];
   drafts: DraftRecord[];
   notificationsEnabled: boolean;
@@ -23,7 +23,7 @@ const DRAFT_STATUS_STYLE: Record<string, string> = {
 
 export function DashboardPage({
   teacherName = "there",
-  schoolName,
+  userEmail,
   history,
   drafts,
   notificationsEnabled,
@@ -31,7 +31,7 @@ export function DashboardPage({
   onSignOut,
 }: DashboardPageProps) {
   return (
-    <AppShell active="dashboard" schoolName={schoolName} onSignOut={onSignOut}>
+    <AppShell active="dashboard" userName={teacherName} userEmail={userEmail} onSignOut={onSignOut}>
       <div className="p-margin-mobile md:p-margin-desktop flex-1">
         <div className="mb-12">
           <h1 className="font-display-lg text-display-lg text-on-surface mb-2">Welcome back, {teacherName}</h1>

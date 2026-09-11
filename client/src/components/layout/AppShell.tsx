@@ -4,7 +4,8 @@ import { cn } from "@/lib/utils";
 
 interface AppShellProps {
   active: "dashboard" | "generator";
-  schoolName?: string;
+  userName?: string;
+  userEmail?: string;
   onSignOut: () => void;
   children: ReactNode;
 }
@@ -14,7 +15,16 @@ const navLinkClass =
 const navLinkActiveClass =
   "flex items-center gap-3 px-4 py-3 rounded-r-full bg-primary-container text-on-primary-container font-bold translate-x-1 transition-transform duration-200 font-label-md text-label-md";
 
-export function AppShell({ active, schoolName = "Your Institution", onSignOut, children }: AppShellProps) {
+// First + last initial for a person's name (e.g. "Jeet Daiya" -> "JD"); falls back to the
+// first two characters for a single-word name.
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+export function AppShell({ active, userName = "", userEmail = "", onSignOut, children }: AppShellProps) {
   return (
     <div className="min-h-screen flex flex-col md:flex-row font-body-md">
       {/* SideNavBar (Desktop) */}
@@ -23,11 +33,11 @@ export function AppShell({ active, schoolName = "Your Institution", onSignOut, c
           <h1 className="font-headline-md text-headline-md text-primary tracking-tight">QuickPaperAI</h1>
           <div className="mt-8 flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center overflow-hidden border border-outline-variant font-label-md text-label-md font-bold text-primary">
-              {schoolName.slice(0, 2).toUpperCase()}
+              {initials(userName)}
             </div>
             <div>
-              <div className="font-label-md text-label-md font-bold text-on-surface">{schoolName}</div>
-              <div className="font-label-sm text-label-sm text-on-surface-variant">Examiner Portal</div>
+              <div className="font-label-md text-label-md font-bold text-on-surface">{userName}</div>
+              <div className="font-label-sm text-label-sm text-on-surface-variant">{userEmail}</div>
             </div>
           </div>
           <Link

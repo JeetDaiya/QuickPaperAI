@@ -44,3 +44,7 @@ those belong in a commit message or PR description. Never edit or remove old ent
   Compiling screen: `generate.$threadId.tsx` previously relied only on a local `hasResumed`
   flag that resets on remount. Now derives "compiling" from the status payload itself
   (`"generating"` with every chapter already `"completed"`), which survives a refresh.
+
+- **2026-09-12** — Wired the new `GET /auth/me` backend endpoint into the sidebar (`AppShell`):
+  it now shows the logged-in user's real name/email (fetched via `useCurrentUser`) instead of
+  the hardcoded "Your Institution" / "Examiner Portal" placeholder.

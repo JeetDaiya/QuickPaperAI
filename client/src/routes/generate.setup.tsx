@@ -3,6 +3,7 @@ import { SetupPage } from "@/pages/SetupPage";
 import { useAuthGuard } from "@/lib/auth";
 import { clearToken } from "@/lib/api/http";
 import { useChapters, useGeneratePaper } from "@/hooks/usePaper";
+import { useCurrentUser } from "@/hooks/useAuth";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { upsertDraft, setActiveThread } from "@/lib/drafts";
 
@@ -15,11 +16,14 @@ function SetupRoute() {
   useAuthGuard();
   const navigate = useNavigate();
   const chaptersQuery = useChapters();
+  const currentUserQuery = useCurrentUser();
   const generateMutation = useGeneratePaper();
 
   return (
     <SetupPage
       chapters={chaptersQuery.data ?? []}
+      userName={currentUserQuery.data?.name}
+      userEmail={currentUserQuery.data?.email}
       isSubmitting={generateMutation.isPending}
       onSubmit={(payload) => {
         generateMutation.mutate(payload, {

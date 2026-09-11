@@ -4,7 +4,7 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import { useAuthGuard } from "@/lib/auth";
 import { clearToken } from "@/lib/api/http";
 import { useHistory, useNotificationSettings } from "@/hooks/usePaper";
-import { useUpdateNotificationSettings } from "@/hooks/useAuth";
+import { useCurrentUser, useUpdateNotificationSettings } from "@/hooks/useAuth";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { loadDrafts, type DraftRecord } from "@/lib/drafts";
 
@@ -17,6 +17,7 @@ function DashboardRoute() {
   useAuthGuard();
   const navigate = useNavigate();
   const historyQuery = useHistory();
+  const currentUserQuery = useCurrentUser();
   const notificationSettingsQuery = useNotificationSettings();
   const updateNotifications = useUpdateNotificationSettings();
   const [drafts, setDrafts] = useState<DraftRecord[]>([]);
@@ -27,6 +28,8 @@ function DashboardRoute() {
 
   return (
     <DashboardPage
+      teacherName={currentUserQuery.data?.name}
+      userEmail={currentUserQuery.data?.email}
       history={historyQuery.data ?? []}
       drafts={drafts}
       notificationsEnabled={notificationSettingsQuery.data?.notifications_enabled ?? true}
