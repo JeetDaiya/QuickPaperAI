@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.tanstack/
+src/routeTree.gen.ts
+*.local
+.DS_Store
+
+# Local env — real values stay out of git; .env.example is the tracked template
+.env
+.env.*
+!.env.example
