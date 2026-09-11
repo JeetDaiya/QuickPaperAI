@@ -1,3 +1,8 @@
+// Client-side tracking of in-progress/unsaved paper sessions — there is no backend endpoint
+// that lists these (GET /api/db/history only returns rows with status="saved"), so recent
+// drafts (generating, awaiting review, failed, etc.) live in localStorage instead, keyed per
+// user so switching accounts on the same browser doesn't leak another user's drafts.
+
 const KEY_PREFIX = "qpa.recent_drafts.v1";
 const ACTIVE_KEY_PREFIX = "qpa.active_thread";
 const MAX = 12;
@@ -30,15 +35,15 @@ function getUserSuffix(): string {
     const base64Url = parts[1];
     const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
     const jsonPayload = decodeURIComponent(
-      window.atob(base64)
+      window
+        .atob(base64)
         .split("")
         .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
+        .join(""),
     );
     const payload = JSON.parse(jsonPayload);
     return payload.sub ? `:${payload.sub}` : "";
-  } catch (e) {
-    console.error("Failed to decode token for drafts prefix:", e);
+  } catch {
     return "";
   }
 }

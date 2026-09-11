@@ -1,109 +1,35 @@
-import type { PaperTypeMode, QuestionType } from "./types";
+import type { DifficultyDistribution, QuestionType } from "@/lib/api/types";
 
-export const SUBJECTS = [
-  "science",
-  "mathematics",
-  "social science",
-  "english",
-  "hindi",
-] as const;
-
-export const STANDARDS = [
-  "6",
-  "7",
-  "8",
-  "9",
-  "10",
-  "11",
-  "12",
-] as const;
-
-// Placeholder until /api/metadata is exposed.
-export const CHAPTERS_BY_SUBJECT: Record<string, string[]> = {
-  Science: [
-    "Chemical Reactions and Equations",
-    "Acids, Bases and Salts",
-    "Metals and Non-metals",
-    "Carbon and its Compounds",
-    "Life Processes",
-    "Light — Reflection and Refraction",
-    "The Human Eye and the Colourful World",
-    "Electricity",
-    "Magnetic Effects of Current",
-    "Our Environment",
-  ],
-  Mathematics: [
-    "Real Numbers",
-    "Polynomials",
-    "Pair of Linear Equations",
-    "Quadratic Equations",
-    "Arithmetic Progressions",
-    "Triangles",
-    "Coordinate Geometry",
-    "Trigonometry",
-    "Circles",
-    "Statistics and Probability",
-  ],
-  "Social Science": [
-    "Nationalism in India",
-    "Resources and Development",
-    "Power Sharing",
-    "Money and Credit",
-    "Globalisation and the Indian Economy",
-  ],
-  English: ["A Letter to God", "Nelson Mandela", "Two Stories about Flying"],
-  Hindi: ["क्षितिज: पद", "क्षितिज: गद्य", "कृतिका"],
+export const DIFFICULTY_PRESETS: Record<string, { label: string; description: string; distribution: DifficultyDistribution }> = {
+  balanced: { label: "Balanced", description: "20% E · 50% M · 30% H", distribution: { easy: 20, medium: 50, hard: 30 } },
+  foundation: { label: "Foundation", description: "60% E · 30% M · 10% H", distribution: { easy: 60, medium: 30, hard: 10 } },
+  challenge: { label: "Challenge", description: "10% E · 30% M · 60% H", distribution: { easy: 10, medium: 30, hard: 60 } },
 };
 
-// Display labels for the backend enum values.
-export const TYPE_LABEL: Record<QuestionType, string> = {
-  MCQ: "MCQ",
-  FILL_IN_THE_BLANK: "Fill in the Blanks",
-  MATCH_THE_COLUMN: "Match the Columns",
-  TRUE_FALSE: "True / False",
-  ONE_WORD_ANS: "One-Word Answer",
-  "2_MARKS": "Short Answer (2 marks)",
-  "3_MARKS": "Medium Answer (3 marks)",
-  "4_MARKS": "Long Answer (4 marks)",
+export const OBJECTIVE_TYPES: { value: QuestionType; label: string }[] = [
+  { value: "MCQ", label: "Multiple Choice (MCQ)" },
+  { value: "FILL_IN_THE_BLANK", label: "Fill in the Blanks" },
+  { value: "MATCH_THE_COLUMN", label: "Match the Columns" },
+  { value: "TRUE_FALSE", label: "True / False" },
+  { value: "ONE_WORD_ANS", label: "One Word Answer" },
+];
+
+export const SUBJECTIVE_TYPES: { value: QuestionType; label: string }[] = [
+  { value: "2_MARKS", label: "2 Marks (Conceptual)" },
+  { value: "3_MARKS", label: "3 Marks (Short Answer)" },
+  { value: "4_MARKS", label: "4 Marks (Structured)" },
+];
+
+export const ALL_QUESTION_TYPES: QuestionType[] = [...OBJECTIVE_TYPES, ...SUBJECTIVE_TYPES].map((t) => t.value);
+export const OBJECTIVE_TYPE_VALUES: QuestionType[] = OBJECTIVE_TYPES.map((t) => t.value);
+export const SUBJECTIVE_TYPE_VALUES: QuestionType[] = SUBJECTIVE_TYPES.map((t) => t.value);
+
+export type PaperTypeMode = "standard" | "mcq" | "objective" | "custom";
+
+export const PAPER_TYPE_MODES: Record<PaperTypeMode, { label: string; description: string; allowedTypes: QuestionType[] | null }> = {
+  standard: { label: "Balanced Standard Mode", description: "MCQ + Subjective", allowedTypes: ALL_QUESTION_TYPES },
+  mcq: { label: "MCQ-Only Mode", description: "Pure Multiple Choice", allowedTypes: ["MCQ"] },
+  objective: { label: "Objective-Only Mode", description: "No Long Answers", allowedTypes: OBJECTIVE_TYPE_VALUES },
+  // null = user picks freely; not a fixed preset.
+  custom: { label: "Custom", description: "Manual toggles", allowedTypes: null },
 };
-
-export const OBJECTIVE_TYPES: QuestionType[] = [
-  "MCQ",
-  "FILL_IN_THE_BLANK",
-  "MATCH_THE_COLUMN",
-  "TRUE_FALSE",
-  "ONE_WORD_ANS",
-];
-
-export const SUBJECTIVE_TYPES: QuestionType[] = [
-  "2_MARKS",
-  "3_MARKS",
-  "4_MARKS",
-];
-
-export const ALL_QUESTION_TYPES: QuestionType[] = [
-  ...OBJECTIVE_TYPES,
-  ...SUBJECTIVE_TYPES,
-];
-
-export const MODE_ALLOWED: Record<PaperTypeMode, QuestionType[]> = {
-  "Balanced Standard Mode": ALL_QUESTION_TYPES,
-  "MCQ-Only Mode": ["MCQ"],
-  "Objective-Only Mode": OBJECTIVE_TYPES,
-};
-
-// Section ordering for the review screen.
-export const SECTION_ORDER: QuestionType[] = [
-  "MCQ",
-  "TRUE_FALSE",
-  "FILL_IN_THE_BLANK",
-  "ONE_WORD_ANS",
-  "MATCH_THE_COLUMN",
-  "2_MARKS",
-  "3_MARKS",
-  "4_MARKS",
-];
-
-export function isObjective(t: QuestionType): boolean {
-  return OBJECTIVE_TYPES.includes(t);
-}
