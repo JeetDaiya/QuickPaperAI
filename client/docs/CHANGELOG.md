@@ -48,3 +48,6 @@ those belong in a commit message or PR description. Never edit or remove old ent
 - **2026-09-12** — Wired the new `GET /auth/me` backend endpoint into the sidebar (`AppShell`):
   it now shows the logged-in user's real name/email (fetched via `useCurrentUser`) instead of
   the hardcoded "Your Institution" / "Examiner Portal" placeholder.
+
+- **2026-09-12** — Added `vercel.json` with a catch-all SPA rewrite to fix a 404 on Vercel when
+  refreshing or deep-linking into any client-side route (e.g. mid-generation/review pages).
