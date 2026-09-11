@@ -2,11 +2,13 @@
 
 Living document — reflects current deploy targets only. Update in place when something moves.
 
-## Current status: not deployed
+## Current status: deployed on Vercel
 
-This app isn't in a git repo yet and isn't deployed anywhere. The backend's old frontend
-(`QuickPaperAI/client`, a TanStack Start + Nitro app) is what's currently live on Vercel — see
-`QuickPaperAI/docs/DEPLOYMENT.md` for its details (don't edit that file from here).
+Live on Vercel as a static Vite SPA build (framework preset "Vite", build `vite build` /
+`npm run build`, output `dist`). `vercel.json` at the repo root adds a catch-all rewrite
+(`/(.*) -> /index.html`) — without it, Vercel serves by literal path, so a hard refresh (or a
+deep link) on any client-side route like `/generate/<threadId>` 404s instead of reaching the
+SPA's router. Don't remove that rewrite.
 
 ## What replacing it actually needs
 

@@ -1,5 +1,7 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as auth from "@/lib/api/auth";
+
+export const useCurrentUser = () => useQuery({ queryKey: ["me"], queryFn: auth.getCurrentUser });
 
 export const useRegister = () => useMutation({ mutationFn: auth.register });
 export const useLogin = () => useMutation({ mutationFn: auth.login });

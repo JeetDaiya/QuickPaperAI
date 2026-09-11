@@ -16,12 +16,14 @@ import type { ChapterInfo, DifficultyDistribution, PaperGenerateRequest, Questio
 export interface SetupPageProps {
   chapters: ChapterInfo[];
   schoolName?: string;
+  userName?: string;
+  userEmail?: string;
   isSubmitting: boolean;
   onSubmit: (payload: PaperGenerateRequest) => void;
   onSignOut: () => void;
 }
 
-export function SetupPage({ chapters, schoolName, isSubmitting, onSubmit, onSignOut }: SetupPageProps) {
+export function SetupPage({ chapters, schoolName, userName, userEmail, isSubmitting, onSubmit, onSignOut }: SetupPageProps) {
   const [institutionName, setInstitutionName] = useState(schoolName ?? "");
   const [subject, setSubject] = useState("");
   const [standard, setStandard] = useState("");
@@ -89,7 +91,7 @@ export function SetupPage({ chapters, schoolName, isSubmitting, onSubmit, onSign
   }
 
   return (
-    <AppShell active="generator" schoolName={schoolName} onSignOut={onSignOut}>
+    <AppShell active="generator" userName={userName} userEmail={userEmail} onSignOut={onSignOut}>
       <div className="flex-grow flex justify-center p-4 md:p-margin-desktop">
         <div className="w-full max-w-container-max bg-surface-container-lowest shadow-sheet rounded-lg border border-outline-variant overflow-hidden">
           <div className="bg-surface-container-low p-6 md:p-8 border-b border-outline-variant">

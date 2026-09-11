@@ -40,6 +40,10 @@ relative to that base.
 - Response `200`: `{ message: string }`
 - Errors: `400` invalid/expired token or email mismatch.
 
+### `GET /auth/me`
+- Auth: Bearer
+- Response `200`: `{ id: string (uuid), email: string, name: string, is_active: boolean, created_at: string (ISO datetime) }`
+
 ### `POST /auth/device-token`
 - Auth: Bearer
 - Request: `{ token: string }` (FCM device token)

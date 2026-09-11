@@ -140,6 +140,11 @@ async def reset_password(
     return {"message": "Password reset successfully."}
 
 
+@auth_routes.get("/me", response_model=UserResponse)
+async def get_me(current_user: dict = Depends(get_current_user)):
+    return current_user
+
+
 @auth_routes.post("/device-token")
 async def save_device_token(
     data: FCMTokenRequest,

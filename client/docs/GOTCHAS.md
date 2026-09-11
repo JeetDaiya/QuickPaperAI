@@ -34,6 +34,14 @@ If you hit something new and non-obvious, add a line here — don't bury it in a
 - The SSE URL carries the auth token as `?token=`, never a header — `EventSource` can't set
   custom headers. See `withToken()`/`resolveFileUrl()` in `lib/api/http.ts`.
 
+## Vercel deploy
+- This is a client-side-routed SPA (TanStack Router, no server). Vercel's static file server
+  otherwise serves by literal path, so refreshing or deep-linking into any route other than `/`
+  (e.g. `/generate/<threadId>` while a paper is generating/reviewing) 404s instead of reaching
+  the router. `vercel.json`'s catch-all rewrite (`/(.*) -> /index.html`) is what fixes this —
+  don't remove it, and if you add a real static asset path that collides with a route name,
+  rewrites still apply (Vercel only skips the rewrite for a file that actually exists on disk).
+
 ## CORS / dev server
 - The backend's dev CORS allowlist (`QuickPaperAI/src/app.py`) only accepts
   `localhost:{5173,8080,3000,8000}` (and the `127.0.0.1` equivalents). Running `vite --port

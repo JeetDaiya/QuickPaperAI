@@ -14,6 +14,10 @@ export function register(payload: { email: string; password: string; name: strin
   });
 }
 
+export function getCurrentUser() {
+  return jsonFetch<UserResponse>("/auth/me");
+}
+
 export function login(payload: { email: string; password: string }) {
   return formFetch<LoginResponse>("/auth/login", {
     username: payload.email,
