@@ -7,10 +7,15 @@ If you hit something new and non-obvious, add a line here — don't bury it in a
 - `with_structured_output()` + `thinking_level` together → 400 `INVALID_ARGUMENT`. Don't combine them.
 - Gemini's structured-output JSON Schema forbids `minItems`/`maxItems` and complex `anyOf`/null
   unions — keep list fields flat with `Field(default=[])`, no length constraints on the schema.
-- LLM must emit **double** backslashes for LaTeX (`\\rightarrow`, `\\theta`) or single-backslash
-  JSON decodes `\r`/`\t` into control characters and corrupts the symbol. There's a
-  `clean_latex()` regex post-processor as a second line of defense — don't remove it even if
-  the prompt looks like it's handling it.
+- LaTeX backslashes: prompts ask for **single** backslashes (`\rightarrow`) — normal `.tex` form.
+  `with_structured_output` already decodes the JSON layer, so the old "double-escape everything"
+  instruction was wrong and made the LLM emit literal `\\text`, which means *line break* in
+  TeX/KaTeX and renders as raw gibberish in the DOCX, the PDF **and** the review UI (three
+  renderers, all silent except Pandoc). `Question.normalize_question` canonicalizes either
+  convention via `_canonicalize_latex` (`src/paper/models.py`) — don't remove it, and don't
+  "fix" escaping in a formatter instead. Known limitation: an under-escaped `\nu`/`\neq` decodes
+  to a real newline and is unrecoverable, since a genuine line break looks identical (`\r`/`\t`/
+  `\f`/`\b` → `\rho`/`\theta`/`\frac`/`\beta` *are* recovered).
 - 2-mark / 4-mark subjective questions get skipped in favor of 3-mark by default — needs
   explicit few-shot examples and a quota directive in the prompt, not just a count.
 
