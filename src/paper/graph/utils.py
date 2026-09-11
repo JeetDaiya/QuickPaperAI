@@ -5,12 +5,6 @@ from typing import Optional
 from src.paper.models import DifficultyDistribution, QuestionDistribution, PaperDifficulty, QuestionTypes
 
 
-def clean_latex(text: str) -> str:
-    if not isinstance(text, str):
-        return text
-    return text.replace('\r', '\\r').replace('\t', '\\t')
-
-
 def format_batch(chunks: list[dict]) -> str:
     """Takes the chunks and formats them for prompt input"""
     sections = []

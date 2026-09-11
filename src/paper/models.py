@@ -1,3 +1,5 @@
+import re
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Literal, Optional
 from enum import StrEnum
@@ -115,17 +117,47 @@ class EvaluationPoint(BaseModel):
     allocated_marks: int = Field(description="Marks allocated for this grading point.")
 
 
+# A LaTeX command whose name starts with one of these letters collides with a single-character
+# JSON escape, so an under-escaped `\frac` arrives as a real formfeed followed by "rac". Mapping
+# the control character back to its two-character form recovers the command.
+# `\n` is deliberately absent: a real newline is legitimate in answers and evaluation points, so
+# there's no way to tell a corrupted `\nu` from an intentional line break.
+_CONTROL_CHAR_REPAIRS = {
+    "\r": r"\r",   # \rightarrow, \rho
+    "\t": r"\t",   # \theta, \times
+    "\f": r"\f",   # \frac, \forall
+    "\b": r"\b",   # \beta, \begin
+}
+
+
+def _canonicalize_latex(text: str) -> str:
+    """Normalizes LLM LaTeX to single-backslash form, whichever way it was mangled.
+
+    Repairs must run before the collapse: they produce single backslashes, so doing it the other
+    way round would leave recovered commands untouched. The lookahead keeps a genuine LaTeX line
+    break (`\\` before whitespace or end of string) intact while collapsing `\\text` to `\text`.
+    """
+    if not isinstance(text, str):
+        return text
+
+    for char, repair in _CONTROL_CHAR_REPAIRS.items():
+        text = text.replace(char, repair)
+
+    return re.sub(r"\\{2,}(?=[A-Za-z])", r"\\", text)
+
+
 class Question(BaseModel):
     question_text: str
     question_type: QuestionTypes
     chapter: str
     marks: int
+    difficulty: PaperDifficulty = Field(description="Cognitive difficulty of this specific question: Easy, Medium, or Hard.")
     options: list[str] = Field(default=[], description="List of options if MCQ.")
     correct_answer: str
     answer: str
     evaluation_scheme: list[EvaluationPoint] = Field(default=[], description="Detailed grading breakdown for subjective questions.")
     diagram_prompt: Optional[str] = Field(default=None, description="Detailed image generation prompt for the diagram, if this question is diagram-based.")
-    
+
     @field_validator("options", mode="before")
     @classmethod
     def convert_options(cls, v):
@@ -134,15 +166,25 @@ class Question(BaseModel):
         if v is None:
             return []
         return v
+
+    @field_validator("difficulty", mode="before")
+    @classmethod
+    def normalize_difficulty(cls, v):
+        if isinstance(v, str):
+            return v.strip().capitalize()
+        return v
         
     @model_validator(mode="after")
     def normalize_question(self) -> "Question":
-        # NOTE: this validator NORMALIZES rather than raises. The LLM returns a whole batch of
-        # ~10 questions as one BatchOutput, so if any single question raised here, the entire
-        # batch failed to parse and was silently dropped (see nodes.question_generator_node) —
-        # producing papers short of the requested count. Since a human reviews and selects
-        # questions before the paper is compiled, it's far better to let an imperfect question
-        # through to that review screen than to drop ten good ones because of it.
+        self.question_text = _canonicalize_latex(self.question_text)
+        self.options = [_canonicalize_latex(opt) for opt in self.options]
+        self.correct_answer = _canonicalize_latex(self.correct_answer)
+        self.answer = _canonicalize_latex(self.answer)
+        if self.diagram_prompt:
+            self.diagram_prompt = _canonicalize_latex(self.diagram_prompt)
+        for pt in self.evaluation_scheme:
+            pt.point_text = _canonicalize_latex(pt.point_text)
+
         if self.question_type.is_subjective:
             # Subjective marks are fully determined by the type — correct a mismatch instead of
             # failing, and keep the marking scheme summing to the corrected total.

@@ -37,6 +37,7 @@ Question Categories & Language Guidelines:
 * Easy: Prioritize recall and basic understanding (Levels 1-2)
 * Balanced: Mix across all levels proportionally
 * Hard: Prioritize application, reasoning, and synthesis (Levels 3-4)
+* You MUST set the `difficulty` field on every generated question to exactly one of "Easy", "Medium", or "Hard", based on the cognitive level above that the question actually corresponds to (Levels 1-2 → Easy, Level 3 → Medium, Level 4 → Hard).
 
 
 Execution Rules:
@@ -55,12 +56,12 @@ Execution Rules:
    - For all non-diagram-based questions, you MUST keep `diagram_prompt` as null or omit it entirely.
 5. Formatting Rules:
     - Write ALL chemical formulas, equations, and mathematical expressions in LaTeX notation across all JSON fields (including question_text, options, correct_answer, and answer).
-    - CRITICAL: Since your output is parsed as JSON, you MUST double-escape all LaTeX backslashes (e.g., write \\rightarrow instead of \rightarrow, \\text instead of \text, \\theta instead of \theta). A single backslash will be parsed as a JSON escape code and corrupt the characters (like \rightarrow becoming a carriage return followed by ightarrow).
+    - CRITICAL: Write every LaTeX command with a SINGLE backslash, exactly as it would appear in a .tex file (\rightarrow, \text, \theta). Do NOT double the backslashes — a doubled backslash means "line break" in LaTeX and corrupts the equation.
     - Use single $ for inline: "The water molecule $H_2O$ consists of..."
     - Use double $$ for standalone equations:
-        $$2H_2 + O_2 \\rightarrow 2H_2O$$
-    - Use \\text{{}} for labels within equations: $\\text{{Glucose}} \\xrightarrow{{\\text{{enzymes}}}} \\text{{Ethanol}} + CO_2$
-    - Subscripts: $H_2SO_4$, Superscripts: $x^2$, Arrows: \\rightarrow
+        $$2H_2 + O_2 \rightarrow 2H_2O$$
+    - Use \text{{}} for labels within equations: $\text{{Glucose}} \xrightarrow{{\text{{enzymes}}}} \text{{Ethanol}} + CO_2$
+    - Subscripts: $H_2SO_4$, Superscripts: $x^2$, Arrows: \rightarrow
 6. Question Type Formatting Guidelines:
       MCQ:
       - Exactly 4 options labeled (a), (b), (c), (d)
@@ -146,6 +147,7 @@ Question Categories & Language Guidelines:
 * Easy: Prioritize factual recall and direct text extraction (Levels 1-2).
 * Balanced: Mix across all levels proportionally.
 * Hard: Prioritize broad synthesis, multi-chapter concepts, and critical evaluation (Levels 3-4).
+* You MUST set the `difficulty` field on every generated question to exactly one of "Easy", "Medium", or "Hard", based on the cognitive level above that the question actually corresponds to (Levels 1-2 → Easy, Level 3 → Medium, Level 4 → Hard).
 
 Execution Rules:
 1. You will receive a chunk of text and its metadata (Standard, Subject, Chapter, Sub-topic).
@@ -161,7 +163,7 @@ Execution Rules:
    - Phrase the `question_text` appropriately (e.g., "Identify the monument shown in the picture and state the religion it belongs to.").
    - For all text-only questions, you MUST keep `diagram_prompt` as null or omit it entirely.
 4. Formatting Rules (JSON & Text):
-    - CRITICAL: Since your output is parsed as JSON, you MUST double-escape all backslashes (e.g., write \\n for newlines). A single backslash will be parsed as a JSON escape code and crash the system.
+    - CRITICAL: Write every LaTeX command with a SINGLE backslash, exactly as it would appear in a .tex file (\rightarrow, \text). Do NOT double the backslashes — a doubled backslash means "line break" in LaTeX and corrupts the expression.
     - Avoid LaTeX formatting unless specifically required for an Economics formula or a Mathematical reference within the history text (e.g., Aryabhatta's discoveries). Use standard text for regular prose, dates, and names.
 5. Question Type Formatting Guidelines:
       MCQ:

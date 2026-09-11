@@ -10,12 +10,12 @@ from src.config.prompts import QUESTION_GENERATOR_SCIENCE_SYSTEM_PROMPT, QUESTIO
 from src.config.model_settings import generator_model
 from src.paper.compilers.interfaces.interface import DocumentCompiler
 from src.paper.formatters.interfaces.interface import PaperFormatter
-from src.paper.models import BatchOutput, Question, QuestionTypes, ChapterStatus, DocumentType, SubjectType
+from src.paper.models import BatchOutput, Question, ChapterStatus, DocumentType, SubjectType
 from src.paper.rate_limiter import TokenBucket
 from src.paper.graph.config import GraphConfig
 from src.paper.graph.state import PaperState, ChapterState
 from src.paper.graph.tracker import ProgressTracker
-from src.paper.graph.utils import clean_latex, group_by_subtopic, build_quota_instructions
+from src.paper.graph.utils import group_by_subtopic, build_quota_instructions
 
 rate_limiter = TokenBucket(max_capacity=5, refil_rate=0.0833)
 
@@ -142,13 +142,6 @@ async def question_generator_node(state: ChapterState, config: RunnableConfig) -
 
     for q in question_list:
         q.chapter = str(chapter)
-        q.question_text = clean_latex(q.question_text)
-        if q.options:
-            q.options = [clean_latex(opt) for opt in q.options]
-        q.correct_answer = clean_latex(q.correct_answer)
-        q.answer = clean_latex(q.answer)
-        if q.diagram_prompt:
-            q.diagram_prompt = clean_latex(q.diagram_prompt)
 
     await progress_tracker.update_chapter_progress(
         thread_id=thread_id,
