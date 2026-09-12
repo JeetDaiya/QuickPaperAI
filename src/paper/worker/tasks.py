@@ -10,6 +10,10 @@ from src.notifications.constants.notification_messages import NotificationMessag
 from langgraph.types import Command
 from arq import Retry
 
+# Single source of truth for ARQ's retry count — WorkerSettings.max_tries reuses this
+# constant instead of duplicating the literal, so they can't silently drift apart.
+MAX_TRIES = 3
+
 
 async def generate_paper_task(
     ctx: dict,
@@ -51,7 +55,8 @@ async def generate_paper_task(
                 "all_questions": [],
                 "selected_questions": [],
                 "paper_request": paper_request,
-                "thread_id": thread_id
+                "thread_id": thread_id,
+                "errors": []
             }
             await run_graph(agent, paper_state=initial_state, dependencies=dependencies, thread_id=thread_id)
 
@@ -84,11 +89,10 @@ async def generate_paper_task(
 
     except Exception as e:
         current_try = ctx.get("job_try", 1)
-        max_tries = 3
-        print(f"[ERROR] generate_paper_task try {current_try}/{max_tries} failed for thread {thread_id}: {e}")
+        print(f"[ERROR] generate_paper_task try {current_try}/{MAX_TRIES} failed for thread {thread_id}: {e}")
 
         # On the FINAL failed retry attempt:
-        if current_try >= max_tries:
+        if current_try >= MAX_TRIES:
             # 1. Update progress tracker status in Redis to FAILED
             if progress_tracker:
                 await progress_tracker.update_chapters_progress(
@@ -122,7 +126,7 @@ async def generate_paper_task(
                 )
 
         # Re-raise so ARQ registers retry or records job failure
-        if current_try >= max_tries:
+        if current_try >= MAX_TRIES:
             raise e
         raise Retry(defer=current_try * 30)
 
@@ -142,6 +146,31 @@ async def resume_paper_task(ctx: dict, thread_id: str, selected_indices: list[in
 
     try:
         await agent.ainvoke(input=resume_command, config=config)
+    except Exception as e:
+        current_try = ctx.get("job_try", 1)
+        print(f"[ERROR] resume_paper_task try {current_try}/{MAX_TRIES} failed for thread {thread_id}: {e}")
+
+        # Only report failure on the FINAL attempt — same reasoning as generate_paper_task:
+        # marking FAILED after try 1 of 3 would leave a stale FAILED status even if a later
+        # retry succeeds, since nothing here ever resets it back.
+        if current_try >= MAX_TRIES:
+            await progress_tracker.mark_all_failed(thread_id=thread_id)
+
+            paper_repo = ctx.get("paper_repo")
+            if paper_repo:
+                try:
+                    from src.db.records.paper_record import PaperRecord, Status
+                    record = PaperRecord(
+                        thread_id=thread_id,
+                        user_id="",
+                        status=Status.FAILED
+                    )
+                    await asyncio.to_thread(paper_repo.update_paper_session, thread_id=thread_id, paper_record=record)
+                except Exception as repo_err:
+                    print(f"[WARN] Failed to update paper session status in DB to FAILED: {repo_err}")
+
+            raise e
+        raise Retry(defer=current_try * 30)
     finally:
         # Wake up any subscribed SSE stream regardless of outcome (completed or failed) —
         # this is what makes the PDF-compilation step visible to the pub/sub-driven stream,

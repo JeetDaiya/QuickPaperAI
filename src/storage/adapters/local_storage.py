@@ -1,6 +1,7 @@
 import os
 from typing import Optional
 
+from src.exception.exceptions import TransientError, NotFoundError
 from src.storage.interfaces.interface import StorageService
 
 
@@ -17,20 +18,19 @@ class LocalStorageService(StorageService):
             with open(full_path, "wb") as f:
                 f.write(file_data)
         except Exception as e:
-            raise e
+            raise TransientError(file_path=file_path) from e
 
     def get_file(self, file_path: str, content_type: Optional[str] = None):
+        full_path = os.path.join(self.root_dir, file_path)
+
+        if not os.path.exists(full_path):
+            raise NotFoundError(file_path=file_path)
+
         try:
-            full_path = os.path.join(self.root_dir, file_path)
-
-            if not os.path.exists(full_path):
-                raise FileNotFoundError(f"Local file not found")
-
             with open(full_path, "rb") as f:
                 return f.read()
-
         except Exception as e:
-            raise e
+            raise TransientError(file_path=file_path) from e
 
     def delete_file(self, file_path : str):
         try:
@@ -40,7 +40,7 @@ class LocalStorageService(StorageService):
                 os.remove(full_path)
 
         except Exception as e:
-            raise e
+            raise TransientError(file_path=file_path) from e
 
     def exists(self, file_path : str):
         try:
@@ -50,5 +50,5 @@ class LocalStorageService(StorageService):
             else:
                 return False
         except Exception as e:
-            raise e
+            raise TransientError(file_path=file_path) from e
 

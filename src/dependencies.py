@@ -13,10 +13,13 @@ from supabase import create_client, Client
 from upstash_redis.asyncio import Redis
 import redis.asyncio as redis_asyncio
 
+from src.auth.services.service import AuthService
+from src.exception.global_exception_handler import AppError
+from src.mail.interfaces.interface import EmailService
 from src.base_settings import settings
-from src.auth.interface.interface import AuthService
+from src.auth.interface.interface import AuthInterface
 from src.auth.interface.otp_store import OTPStore
-from src.auth.adapters.custom_auth_service import CustomAuthService
+from src.auth.adapters.custom_auth_service import CustomAuthAdapter
 from src.auth.adapters.redis_otp_store import RedisOTPStore
 from src.db.interfaces.interface import ChunkRepository, UserRepository, PaperRepository
 from src.db.adapters.supabase_db import SupabaseChunkRepository, SupabaseUserRepository, SupabasePaperRepository
@@ -89,8 +92,8 @@ def get_otp_store() -> OTPStore:
 
 
 @lru_cache
-def get_authentication_service(user_repo: UserRepository = Depends(get_user_repository)) -> AuthService:
-    return CustomAuthService(
+def get_authentication_adapter(user_repo: UserRepository = Depends(get_user_repository)) -> AuthInterface:
+    return CustomAuthAdapter(
         algorithm=settings.ALGORITHM,
         secret_key=settings.SECRET_KEY,
         user_repo=user_repo,
@@ -117,6 +120,20 @@ def get_document_compiler() -> DocumentCompiler:
 def get_progress_tracker() -> ProgressTracker:
     redis_client = Redis(url=settings.UPSTASH_REDIS_REST_URL, token=settings.UPSTASH_REDIS_REST_TOKEN)
     return ProgressTracker(redis_client=redis_client, ttl_seconds=86400)
+
+
+def get_auth_service(
+        email_service : EmailService =  Depends(get_email_service),
+        otp_storage : OTPStore = Depends(get_otp_store),
+        auth : AuthInterface = Depends(get_authentication_adapter),
+        user_repo : UserRepository = Depends(get_user_repository)
+) -> AuthService:
+    return AuthService(
+        email_service=email_service,
+        otp_store=otp_storage,
+        auth=auth,
+        user_repo=user_repo
+    )
 
 
 pubsub_redis_instance: Optional[redis_asyncio.Redis] = None
@@ -235,7 +252,7 @@ async def lifespan(app: FastAPI):
 async def get_current_user(
     request: Request, 
     token: str = Depends(oauth2_scheme), 
-    auth_service: AuthService = Depends(get_authentication_service)
+    auth_service: AuthInterface = Depends(get_authentication_adapter)
 ):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -253,7 +270,7 @@ async def get_current_user(
     try:
         user = await auth_service.verify_session(token=token)
         return user
-    except HTTPException as e:
+    except (HTTPException, AppError) as e:
         raise e
     except Exception:
         raise credentials_exception

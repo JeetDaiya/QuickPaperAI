@@ -8,6 +8,7 @@ class PaperState(TypedDict):
     all_questions: Annotated[list[Question], operator.add]
     selected_questions: list[Question]
     thread_id: str
+    errors: Annotated[list[dict], operator.add]
 
 
 class ChapterState(TypedDict):

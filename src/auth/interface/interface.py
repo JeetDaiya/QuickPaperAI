@@ -2,7 +2,7 @@ from abc import  ABC, abstractmethod
 from typing import Optional
 
 
-class AuthService(ABC):
+class AuthInterface(ABC):
     @abstractmethod
     async def register_user(self, email: str, password: str, name: str) -> dict:
         pass
