@@ -1,6 +1,8 @@
 import os
 import asyncio
 
+from src.exception.exceptions import InternalServerError_, TransientError, ValidationError_
+from src.exception.global_exception_handler import AppError
 from src.paper.compilers.interfaces.interface import DocumentCompiler
 from playwright.async_api import async_playwright
 
@@ -31,7 +33,7 @@ class CustomDocumentCompiler(DocumentCompiler):
                         answer_page.wait_for_load_state("load", timeout=15000),
                     )
                 except Exception as err:
-                    print(f"[WARN] Playwright load state timeout (proceeding to generate PDF): {err}")
+                    raise err
 
                 await asyncio.gather(
                     paper_page.pdf(
@@ -45,6 +47,8 @@ class CustomDocumentCompiler(DocumentCompiler):
                         print_background=True
                     ),
                 )
+            except Exception as e:
+                raise TransientError(paper_output_path=paper_output_path, answer_output_path=answer_output_path) from e
             finally:
                 await browser.close()
 
@@ -61,15 +65,22 @@ class CustomDocumentCompiler(DocumentCompiler):
             except asyncio.TimeoutError:
                 proc.kill()
                 await proc.wait()
-                raise RuntimeError("Pandoc DOCX compilation timed out after 60s")
+                raise TransientError(output_path=output_path) from None
 
             # communicate() doesn't raise on a non-zero exit — check it explicitly, else a failed
             # conversion would look like success and leave no (or a corrupt) DOCX behind.
             if proc.returncode != 0:
                 err = stderr.decode(errors="replace").strip() if stderr else ""
-                raise RuntimeError(f"Pandoc exited with code {proc.returncode}: {err}")
+                raise ValidationError_(exit_code=proc.returncode, stderr=err, output_path=output_path)
 
             print(f"[INFO] DOCX Question Paper compiled successfully to {output_path}")
+        except AppError:
+            raise
+        except Exception as e:
+            raise InternalServerError_(output_path=output_path) from e
         finally:
             if os.path.exists(temp_md_path):
-                os.remove(temp_md_path)
+                try:
+                    os.remove(temp_md_path)
+                except OSError:
+                    print(f"Failed to clean up temp file {temp_md_path}")

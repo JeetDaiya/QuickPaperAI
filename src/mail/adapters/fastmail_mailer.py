@@ -1,4 +1,6 @@
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
+
+from src.exception.exceptions import InternalServerError_
 from src.mail.interfaces.interface import EmailService
 
 from src.base_settings import settings
@@ -28,7 +30,6 @@ class FastMailService(EmailService):
                 body=body,
                 subtype=MessageType.html
             )
-
             await self.fastMail.send_message(message)
         except Exception as e:
-            raise e
+            raise InternalServerError_(email=recipient) from e

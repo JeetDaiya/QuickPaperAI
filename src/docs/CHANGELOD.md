@@ -52,3 +52,18 @@ explaining, that belongs in a commit message, not here. If it's still true today
 - BOLA/IDOR fix: `verify_thread_ownership` dependency enforced across all `thread_id` routes.
 - LangGraph HITL resume dict-unpacking fix; dependency propagation fix for resumed runs
   (formatters/compiler were `None` on resume, now passed through `config["configurable"]`).
+
+## 2026-09-12
+- `AppError` exception hierarchy (`src/exception/`) + global `@app.exception_handler` in
+  `src/app.py`, replacing scattered `HTTPException`s and dead-code `except SupabaseException`
+  handlers across auth/db/storage/paper adapters and services.
+- `resume_paper_task` now has real failure handling (was `try/finally` only); chapters with zero
+  generated questions report `FAILED` instead of a silent empty `COMPLETED`; `PaperState.errors`
+  added; `RetryPolicy` on `question_generator_node` uses a custom `retry_on` instead of retrying
+  every exception type indiscriminately; `is_cancelled`/`mark_cancelled` fail open on Redis
+  errors; `MAX_TRIES` deduplicated into a single constant shared by the worker and tasks.
+- Worker DB pool connection now retries on startup instead of crashing the process on the first
+  transient failure.
+- `_generate_batch`'s outer tenacity retry no longer retries `OutputParserException` — the
+  11-model fallback chain already covers it; retrying the whole chain again multiplied cost for
+  little benefit.

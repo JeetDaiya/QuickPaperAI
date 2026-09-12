@@ -3,11 +3,12 @@ import os
 import uuid
 from typing import Optional
 
-from fastapi import HTTPException
 from langgraph.graph.state import CompiledStateGraph
 from peewee import Database
 from starlette.responses import FileResponse
 
+from src.exception.exceptions import NotFoundError, InternalServerError_
+from src.exception.global_exception_handler import AppError
 from src.db.records.paper_record import PaperRecord, Status
 from src.paper.graph.tracker import ProgressTracker
 from src.db.interfaces.interface import PaperRepository, ChunkRepository, UserRepository
@@ -58,7 +59,7 @@ class PaperService:
 
         if not snapshot.values or not snapshot.values.get("paper_request"):
             print(f"[ERROR] State or paper_request missing for thread {thread_id}")
-            return {"status": "failed"}
+            raise NotFoundError(thread_id=thread_id)
 
         raw_req = snapshot.values.get("paper_request")
         paper_request = raw_req if isinstance(raw_req, PaperRequest) else PaperRequest(**raw_req)
@@ -108,19 +109,17 @@ class PaperService:
                 paper_request=paper_request,
                 status=Status.FAILED
             )
-            try:
-                await asyncio.to_thread(self.paper_repo.update_paper_session, thread_id=thread_id, paper_record=failed_record)
-            except Exception as update_err:
-                print(f"[WARN] Failed to update session status to FAILED in DB: {update_err}")
 
+            await asyncio.to_thread(self.paper_repo.update_paper_session, thread_id=thread_id, paper_record=failed_record)
             # Rollback any uploaded cloud files
             for storage_path in file_paths.values():
                 try:
                     await asyncio.to_thread(self.cloud_storage.delete_file, file_path=storage_path)
-                except Exception:
-                    pass
+                except AppError as update_err:
+                    print(f"[WARN] Failed to update session status to FAILED in DB: {update_err}")
 
-            return {"status": "failed"}
+
+            raise e
 
     async def download_file(self, thread_id: str, filename: str, preview: bool = False):
         output_dir = f"outputs/{thread_id}"
@@ -144,45 +143,55 @@ class PaperService:
 
         target_column = column_mapping.get(filename)
         if not target_column:
-            raise HTTPException(status_code=400, detail="Invalid filename")
+            raise NotFoundError(filename=filename)
 
-        try:
-            response = await asyncio.to_thread(self.paper_repo.get_paper_metadata, thread_id=thread_id, paper_name=target_column)
-            if not response.data:
-                raise HTTPException(status_code=404, detail="Paper session record not found in database.")
 
-            file_path = response.data[0].get(target_column)
-            if not file_path:
-                raise HTTPException(status_code=404, detail=f"{filename} not found in database.")
+        response = await asyncio.to_thread(self.paper_repo.get_paper_metadata, thread_id=thread_id, paper_name=target_column)
+        if not response.data:
+            raise NotFoundError(thread_id=thread_id)
 
-            file_bytes = await asyncio.to_thread(self.cloud_storage.get_file, file_path)
-            await asyncio.to_thread(self.local_storage.put_file, file_data=file_bytes, file_path=f"{thread_id}/{filename}")
+        file_path = response.data[0].get(target_column)
+        if not file_path:
+            raise NotFoundError(filename=filename, thread_id=thread_id)
 
-            print(f"[INFO] Recovered and hot-cached {filename} successfully from Supabase Storage.")
-            return FileResponse(local_path, media_type=response_media_type, filename=response_filename)
+        file_bytes = await asyncio.to_thread(self.cloud_storage.get_file, file_path)
+        await asyncio.to_thread(self.local_storage.put_file, file_data=file_bytes, file_path=f"{thread_id}/{filename}")
 
-        except Exception as e:
-            print(f"[ERROR] Error recovering file from Supabase: {e}")
-            raise HTTPException(status_code=500, detail="Failed to recover file from Supabase")
+        print(f"[INFO] Recovered and hot-cached {filename} successfully from Supabase Storage.")
+        return FileResponse(local_path, media_type=response_media_type, filename=response_filename)
+
+
 
     async def cancel_generation(self, thread_id: str, db_pool: Database):
-        try:
-            await self.progress_tracker.mark_cancelled(thread_id=thread_id)
-            await self.task_manager.cancel_task(thread_id=thread_id)
-            await self.progress_tracker.delete_progress(thread_id=thread_id)
+        await self.progress_tracker.mark_cancelled(thread_id=thread_id)
+        await self.task_manager.cancel_task(thread_id=thread_id)
+        await self.progress_tracker.delete_progress(thread_id=thread_id)
 
-            await self._cleanup_checkpoints(db_pool, thread_id)
-            await self._cleanup_paper_metadata(thread_id)
-            await self._cleanup_cloud_files(thread_id)
-            await self._cleanup_local_cache(thread_id)
+        # Each step is independent cleanup — always attempt all four, even if an earlier
+        # one fails, so a single failing step doesn't orphan the rest.
+        failed_steps = []
+        for step_name, coro in (
+            ("checkpoints", self._cleanup_checkpoints(db_pool, thread_id)),
+            ("paper_metadata", self._cleanup_paper_metadata(thread_id)),
+            ("cloud_files", self._cleanup_cloud_files(thread_id)),
+            ("local_cache", self._cleanup_local_cache(thread_id)),
+        ):
+            try:
+                await coro
+            except Exception as e:
+                print(f"[WARN] Cleanup step '{step_name}' failed for thread {thread_id}: {e}")
+                failed_steps.append(step_name)
 
-            return {
-                "status": "cancelled",
-                "message": f"Successfully aborted and cleaned up thread {thread_id} completely."
-            }
-        except Exception as e:
-            print(f"[ERROR] Error during active session cancellation: {e}")
-            raise HTTPException(status_code=500, detail="Failed to cancel and clean up generation session")
+        if failed_steps:
+            raise InternalServerError_(
+                thread_id=thread_id,
+                failed_steps=failed_steps,
+            )
+
+        return {
+            "status": "cancelled",
+            "message": f"Successfully aborted and cleaned up thread {thread_id} completely."
+        }
 
     async def _cleanup_checkpoints(self, db_pool: Database, thread_id: str) -> None:
         try:
@@ -193,20 +202,15 @@ class PaperService:
                             await cur.execute(f"DELETE FROM {table} WHERE thread_id = %s", (thread_id,))
             print(f"[INFO] Cleaned all checkpointer DB entries for thread {thread_id}")
         except Exception as e:
-            print(f"[WARN] Could not clean Postgres checkpoints from Saver: {e}")
+            raise InternalServerError_(thread_id=thread_id) from e
 
     async def _cleanup_paper_metadata(self, thread_id: str) -> None:
-        try:
-            await asyncio.to_thread(self.paper_repo.delete_paper_metadata, thread_id=thread_id)
-        except Exception as e:
-            print(f"[WARN] Could not delete generated_papers metadata: {e}")
+        await asyncio.to_thread(self.paper_repo.delete_paper_metadata, thread_id=thread_id)
 
     async def _cleanup_cloud_files(self, thread_id: str) -> None:
-        try:
-            for filename in GENERATED_DOCUMENT_TYPES:
-                await asyncio.to_thread(self.cloud_storage.delete_file, file_path=f"{thread_id}/{filename}")
-        except Exception as e:
-            print(f"[WARN] Cloud storage assets not found or could not be removed: {e}")
+        for filename in GENERATED_DOCUMENT_TYPES:
+            await asyncio.to_thread(self.cloud_storage.delete_file, file_path=f"{thread_id}/{filename}")
+
 
     async def _cleanup_local_cache(self, thread_id: str) -> None:
         if await asyncio.to_thread(self.local_storage.exists, file_path=f"{thread_id}/{DocumentType.PAPER_PDF}"):
@@ -267,7 +271,8 @@ class PaperService:
             if progress and any(item.get("status") == ChapterStatus.FAILED for item in progress.values()):
                 return {
                     "status": "failed",
-                    "progress": progress
+                    "progress": progress,
+                    "errors": snapshot.values.get("errors", [])
                 }
 
         progress = await self.progress_tracker.get_chapter_progress(thread_id)

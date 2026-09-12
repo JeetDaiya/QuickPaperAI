@@ -34,9 +34,18 @@ START → distribute → [Send: per chapter, parallel]
   `question_generator_node` checks `is_cancelled` at the top of each batch iteration and breaks
   early.
 - LLM calls: each batch invocation is wrapped in `_generate_batch` with a 90s `asyncio.wait_for`
-  timeout and `tenacity` retry (2 attempts, 2s apart) for `TimeoutError` / `OutputParserException`.
-- Retries: `RetryPolicy` on fanned-out nodes, up to 3 attempts, exponential backoff + jitter,
-  for 429 / 503 / structural decode failures.
+  timeout and `tenacity` retry (4 attempts, exponential 2s→30s + jitter) for `TimeoutError` and
+  rate-limit-shaped messages only — deliberately **not** `OutputParserException`, since
+  `generator_model`'s 11-model `.with_fallbacks()` chain (`src/config/model_settings.py`)
+  already gives every model one shot at valid structured output; retrying that whole chain again
+  for a schema problem multiplies cost for little chance of a different outcome.
+- Retries: `RetryPolicy` on `question_generator_node`, up to 3 attempts, exponential backoff +
+  jitter, using a custom `retry_on` (`src/paper/graph/builder.py::_node_retry_on`) that retries
+  our own `TransientError` plus library defaults (`ConnectionError`, 5xx) — and explicitly does
+  **not** retry permanent `AppError`s like `NotFoundError`/`ValidationError_`.
+- `PaperState.errors` (plain `list[dict]`, not a custom Pydantic type) accumulates per-chapter
+  failure records via the same `operator.add` reducer as `all_questions`, so parallel chapter
+  fan-outs contribute without racing.
 
 ## Background execution
 - Durable ARQ (Redis-backed) worker, not in-process `asyncio.Task`.
@@ -63,8 +72,11 @@ START → distribute → [Send: per chapter, parallel]
 
 ## Auth
 - Custom JWT auth (`python-jose`), not a third-party identity provider — but abstracted behind
-  an `AuthService` interface specifically so it can be swapped later (Google/Supabase
-  Auth/Clerk) without touching routes.
+  an `AuthInterface` (`src/auth/interface/interface.py`) specifically so the adapter can be
+  swapped later (Google/Supabase Auth/Clerk) without touching routes. `CustomAuthAdapter`
+  implements it directly against `UserRepository`. Routes don't call the adapter directly —
+  they depend on `AuthService` (`src/auth/services/service.py`), a use-case layer above the
+  adapter that owns OTP flow orchestration, error translation, and response shaping.
 - Password hashing via `passlib[bcrypt]` (see GOTCHAS for the version pin).
 - OTP flow (signup + reset_password) is purpose-namespaced and Redis-backed (Upstash), with
   cooldown + attempt-lockout state.
@@ -87,6 +99,7 @@ All cross-cutting capabilities are `interfaces/` + swappable `adapters/`:
 | PDF/DOCX compilation | `DocumentCompiler` | `CustomDocumentCompiler` (Playwright + Pandoc) |
 | Push notifications | (not yet abstracted — direct `FirebaseNotificationService`) | — |
 | Task queue | (not yet abstracted — direct ARQ `TaskManager`) | — |
+| Error handling | `AppError` hierarchy (`src/exception/exceptions.py`) | Adapters translate library exceptions (`postgrest.APIError`, `StorageException`, etc.) into `AppError` subclasses; a single `@app.exception_handler(AppError)` in `src/app.py` translates those into `{"detail", "code"}` JSON with the right HTTP status |
 
 Formatters/compiler are injected into graph nodes via `GraphConfig` (`RunnableConfig`'s
 `configurable`), not imported directly in `nodes.py`.
@@ -95,12 +108,14 @@ Formatters/compiler are injected into graph nodes via `GraphConfig` (`RunnableCo
 ```
 QuickPaperAI/
 ├── src/
-│   ├── auth/        # interface/, adapters/ (JWT+bcrypt, RedisOTPStore), routes/, schemas
+│   ├── auth/        # interface/, adapters/ (JWT+bcrypt, RedisOTPStore), services/ (use-case
+│   │                #   layer), routes/, schemas
 │   ├── paper/        # models, schemas, service, task_manager, rate_limiter, routes/,
 │   │                #   graph/ (builder, nodes, state, tracker, utils), formatters/, compilers/
 │   ├── db/           # interfaces/, adapters/ (Supabase), services/, routes/
 │   ├── storage/       # interfaces/, adapters/ (local, supabase)
 │   ├── mail/          # interfaces/, adapters/ (fastmail)
+│   ├── exception/      # AppError hierarchy + global FastAPI exception handler
 │   ├── config/         # settings.py (LLM + fallback chains), prompts.py
 │   ├── base_settings.py, dependencies.py, app.py, main.py
 ├── scripts/            # parse_textbooks.ipynb, run_cli.py, recover_paper.py

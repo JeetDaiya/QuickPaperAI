@@ -38,11 +38,33 @@ If you hit something new and non-obvious, add a line here — don't bury it in a
   (`PaperRequest`, `Question`, `EvaluationPoint`, `DifficultyDistribution`, enums, etc.) must be
   explicitly registered in the `JsonPlusSerializer` allow-list in **both** `src/dependencies.py`
   and `src/paper/worker/settings.py` — they must stay identical. Missing types cause silent
-  deserialization failures on resume.
-- ARQ retry backoff: `generate_paper_task` uses `Retry(defer=current_try * 30)` (import `Retry`
-  from `arq`, not `arq.jobs` — it's defined in `arq/worker.py` and re-exported at the top level)
-  for linear backoff on transient failures — don't replace with a bare `raise` or retries fire
-  immediately.
+  deserialization failures on resume. Plain `dict`/`list` fields (e.g. `PaperState.errors`) do
+  **not** need registration — only custom Pydantic types do. Don't "fix" this by wrapping errors
+  in a Pydantic model; that just walks into the allow-list trap for no reason.
+- ARQ retry backoff: `generate_paper_task` and `resume_paper_task` use `Retry(defer=current_try
+  * 30)` (import `Retry` from `arq`, not `arq.jobs` — it's defined in `arq/worker.py` and
+  re-exported at the top level) for linear backoff on transient failures — don't replace with a
+  bare `raise` or retries fire immediately. `MAX_TRIES` is defined once in
+  `src/paper/worker/tasks.py` and imported by `WorkerSettings.max_tries` — don't reintroduce a
+  duplicate literal, they will silently drift apart.
+- `supabase.SupabaseException` is **not** the base class of real query errors — verified
+  directly against the installed package: `postgrest.exceptions.APIError` (what a real
+  RLS/unique-violation/timeout failure actually raises) is a sibling class, not a subclass.
+  `except SupabaseException` around a Supabase query is dead code; catch broadly at the adapter
+  boundary and translate to `RepositoryError` (`src/exception/exceptions.py`) instead.
+- `psycopg_pool.AsyncConnectionPool.open()` defaults to `wait=False`, which returns almost
+  immediately without actually validating connectivity — a bad `DB_URI` won't raise there.
+  Passing `wait=True` makes it block and raise `PoolTimeout` properly, but a pool that fails via
+  `wait=True` **closes itself** and cannot be reopened (per its own docstring) — a retry loop
+  (`src/paper/worker/settings.py::_open_pool_with_retry`) must build a fresh pool per attempt,
+  not reuse one instance.
+- `langchain_core`'s `.with_fallbacks()` catches bare `Exception` by default — a permanent,
+  structural failure (a schema every model rejects identically, not just a rate limit) still
+  burns through the entire fallback list before raising. Don't add a permanent-error type back
+  into the outer tenacity retry (`_is_retryable_error` in `src/paper/graph/nodes.py`) without
+  re-deriving the cost — it multiplies the whole fallback chain's call count by the outer
+  attempt count (verified: up to 132 calls for one topic batch before this was fixed to exclude
+  `OutputParserException`).
 - The `app` and `worker` containers both write/read `outputs/{thread_id}/...` (PDF/DOCX local
   cache) and must share the `paper_outputs` Docker volume (`docker-compose.yml`) — `pdf_node`
   runs wherever the graph resumes (the ARQ worker, since resume always happens there), and
@@ -73,13 +95,15 @@ If you hit something new and non-obvious, add a line here — don't bury it in a
 - Preview/download URLs append params with `&`, not a second `?` — a second `?token=` on an
   already-parameterized URL silently breaks auth (`?preview=true?token=...` invalidates token).
 
-## Security — known open item
-- ⚠️ CORS in `src/app.py` was last set to `allow_origin_regex=".*"` with `allow_credentials=True`
-  to unblock a credentialed cross-origin request. This combination was independently flagged as
-  **critical** in the most recent security audit (wildcard origin + credentials = any site can
-  make authenticated requests as the logged-in user). Check the current state of `src/app.py`
-  before assuming this is still open — if it hasn't been fixed, an explicit origin allowlist is
-  the correct fix, not disabling `allow_credentials`.
-- The `{"status": "failed"}` + HTTP 200 error envelope pattern ("Option A") exists in
-  `PaperService` in places — check `docs/ROADMAP.md`, this is a known-wanted migration to real
-  HTTP status codes, don't treat 200-with-failed-body as a new bug if you see it.
+## Security
+- CORS in `src/app.py` uses an explicit `allow_origins` list (`dev_origins + prod_origins` from
+  `settings.ALLOWED_ORIGINS`), not a wildcard regex — the previous `allow_origin_regex=".*"` +
+  `allow_credentials=True` combination (flagged critical in an earlier security audit: wildcard
+  origin + credentials lets any site make authenticated requests as the logged-in user) has been
+  resolved. If you see a wildcard regex reappear here, that's a regression, not a new finding.
+- The `{"status": "failed"}` + HTTP 200 error envelope pattern ("Option A") is **partially**
+  migrated: `PaperService.save_to_cloud` now raises `AppError` on failure instead of returning
+  this shape. `PaperService.get_generation_status`'s use of `{"status": "failed", "progress":
+  ...}` is a different thing — a legitimate polling/state-machine value, not an error envelope —
+  and is intentionally unchanged; don't conflate the two or "fix" the status endpoint by mistake.
+  See `src/docs/ROADMAP.md` for the rest of this migration.

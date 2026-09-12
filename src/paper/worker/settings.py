@@ -3,6 +3,7 @@ from psycopg.rows import dict_row
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from arq.connections import RedisSettings
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from src.base_settings import settings
 from src.dependencies import (
@@ -16,7 +17,7 @@ from src.dependencies import (
     get_user_repository,
 )
 from src.paper.graph.builder import graph
-from src.paper.worker.tasks import generate_paper_task, resume_paper_task
+from src.paper.worker.tasks import generate_paper_task, resume_paper_task, MAX_TRIES
 
 
 def get_redis_settings() -> RedisSettings:
@@ -25,9 +26,36 @@ def get_redis_settings() -> RedisSettings:
     return RedisSettings()
 
 
+@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
+async def _open_pool_with_retry() -> AsyncConnectionPool:
+    # Postgres (Supabase) may still be coming up when the worker container starts (e.g. in
+    # docker-compose) — retry a few times before giving up, instead of crashing the whole
+    # worker process on the first transient connection failure.
+    #
+    # A pool that fails to open (wait=True raises PoolTimeout on failure) closes itself and
+    # cannot be reopened, so each retry attempt builds a fresh pool rather than reusing one.
+    pool = AsyncConnectionPool(
+        conninfo=settings.DB_URI,
+        max_size=10,
+        open=False,
+        check=AsyncConnectionPool.check_connection,
+        kwargs={
+            "autocommit": True,
+            "row_factory": dict_row,
+            "prepare_threshold": None
+        }
+    )
+    try:
+        await pool.open(wait=True, timeout=10)
+        return pool
+    except Exception as e:
+        print(f"[WARN] DB pool connection attempt failed: {e} — retrying...")
+        raise
+
+
 class WorkerSettings:
     functions = [generate_paper_task, resume_paper_task]
-    max_tries = 3
+    max_tries = MAX_TRIES
     job_timeout = 3600
     allow_abort_jobs = True
     redis_settings = get_redis_settings()
@@ -36,18 +64,7 @@ class WorkerSettings:
     @staticmethod
     async def on_startup(ctx: dict) -> None:
         print("[INFO] Starting ARQ Worker & initializing services...")
-        pool = AsyncConnectionPool(
-            conninfo=settings.DB_URI,
-            max_size=10,
-            open=False,
-            check=AsyncConnectionPool.check_connection,
-            kwargs={
-                "autocommit": True,
-                "row_factory": dict_row,
-                "prepare_threshold": None
-            }
-        )
-        await pool.open()
+        pool = await _open_pool_with_retry()
 
         allowed_types = [
             ("src.paper.models", "PaperRequest"),

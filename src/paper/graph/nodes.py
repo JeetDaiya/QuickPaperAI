@@ -3,7 +3,6 @@ import asyncio
 from tenacity import retry, stop_after_attempt, wait_random_exponential, retry_if_exception
 from langchain_core.runnables import RunnableConfig
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.exceptions import OutputParserException
 from langgraph.types import Send, interrupt
 
 from src.config.prompts import QUESTION_GENERATOR_SCIENCE_SYSTEM_PROMPT, QUESTION_GENERATOR_SYSTEM_SS_PROMPT
@@ -21,11 +20,18 @@ rate_limiter = TokenBucket(max_capacity=5, refil_rate=0.0833)
 
 
 def _is_retryable_error(exc: Exception) -> bool:
-    """Retry transient failures: timeouts, malformed structured output, and provider rate limits
-    (429 / ResourceExhausted / quota). Rate limits are matched by message rather than exception
-    class so this works across providers — Gemini and the Groq fallbacks raise different
-    exception types for the same 429."""
-    if isinstance(exc, (asyncio.TimeoutError, OutputParserException)):
+    """Retry transient failures: timeouts and provider rate limits (429 / ResourceExhausted /
+    quota). Rate limits are matched by message rather than exception class so this works across
+    providers — Gemini and the Groq fallbacks raise different exception types for the same 429.
+
+    Deliberately does NOT retry OutputParserException here: generator_model already has an
+    11-model .with_fallbacks() chain (src/config/model_settings.py), each model retrying its own
+    call up to 3x (max_retries=2) — so a structured-output failure already gets up to 33 calls
+    across every model before it reaches this function. Retrying the whole chain again here (up
+    to 4x via stop_after_attempt below) would multiply that to ~132 calls for a schema problem
+    that a near-deterministic (temperature=0.1) second pass is unlikely to fix — unlike a timeout
+    or rate limit, where retrying later is meaningfully different from retrying immediately."""
+    if isinstance(exc, asyncio.TimeoutError):
         return True
     msg = str(exc).lower()
     return (
@@ -143,14 +149,21 @@ async def question_generator_node(state: ChapterState, config: RunnableConfig) -
     for q in question_list:
         q.chapter = str(chapter)
 
+    # Every batch swallows its own failure above (so one bad batch doesn't take down the
+    # whole chapter) — but if that means EVERY batch failed, report the chapter as FAILED
+    # rather than a silently-empty COMPLETED, so it's visible in progress and to the user.
+    chapter_failed = len(question_list) == 0
     await progress_tracker.update_chapter_progress(
         thread_id=thread_id,
         chapter=chapter,
-        status=ChapterStatus.COMPLETED,
+        status=ChapterStatus.FAILED if chapter_failed else ChapterStatus.COMPLETED,
         generated_count=len(question_list)
     )
 
-    return {"all_questions": question_list}
+    result: dict = {"all_questions": question_list}
+    if chapter_failed:
+        result["errors"] = [{"chapter": str(chapter), "message": "All question batches failed for this chapter"}]
+    return result
 
 
 def router_node(state: PaperState):

@@ -3,6 +3,7 @@ from typing import Optional
 
 from supabase import Client
 
+from src.exception.exceptions import RepositoryError
 from src.storage.interfaces.interface import StorageService
 
 
@@ -15,7 +16,7 @@ class SupabaseStorageService(StorageService):
         try:
             self.db.storage.get_bucket(bucket_name)
         except Exception as e:
-            raise e
+            raise RepositoryError(bucket_name=bucket_name) from e
 
 
     def put_file(self, file_data: bytes, file_path: str, content_type: Optional[str] = None):
@@ -26,20 +27,20 @@ class SupabaseStorageService(StorageService):
                 file_options={"content-type" : content_type, "x-upsert" : "true"},
             )
         except Exception as e:
-            raise e
+            raise RepositoryError(file_path=file_path) from e
 
     def get_file(self, file_path : str):
         try:
             file_bytes = self.db.storage.from_(self.bucket_name).download(file_path)
             return file_bytes
         except Exception as e:
-            raise e
+            raise RepositoryError(file_path=file_path) from e
 
     def delete_file(self, file_path : str):
         try:
             self.db.storage.from_(self.bucket_name).remove([file_path])
         except Exception as e:
-            raise e
+            raise RepositoryError(file_path=file_path) from e
 
     def exists(self, file_path: str) -> bool:
         try:
@@ -50,6 +51,6 @@ class SupabaseStorageService(StorageService):
             files = self.db.storage.from_(self.bucket_name).list(folder)
             return any(f.get('name') == filename for f in files)
         except Exception as e:
-            raise e
+            raise RepositoryError(file_path=file_path) from e
 
 
