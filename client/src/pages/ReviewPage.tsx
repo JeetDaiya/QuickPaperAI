@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Latex } from "@/components/Latex";
 import type { Question } from "@/lib/api/types";
 
@@ -7,6 +7,14 @@ const DIFFICULTY_STYLE: Record<string, string> = {
   Medium: "bg-surface-variant text-on-surface-variant",
   Hard: "bg-error-container text-on-error-container",
 };
+
+function pillClass(active: boolean): string {
+  return `px-3 py-1.5 rounded-full border font-label-sm whitespace-nowrap transition-colors ${
+    active
+      ? "bg-primary text-on-primary border-primary"
+      : "bg-surface text-on-surface-variant border-outline-variant hover:bg-surface-container-high"
+  }`;
+}
 
 export interface ReviewPageProps {
   questions: Question[];
@@ -31,6 +39,14 @@ export function ReviewPage({ questions, targets, onFinalize, isSubmitting, error
   const chapters = useMemo(() => [...new Set(questions.map((q) => q.chapter))], [questions]);
   const [activeChapter, setActiveChapter] = useState(chapters[0] ?? "");
   const [selected, setSelected] = useState<Set<number>>(new Set(questions.map((_, i) => i)));
+  const [typeFilter, setTypeFilter] = useState<string>("ALL");
+  const [difficultyFilter, setDifficultyFilter] = useState<string>("ALL");
+
+  function switchChapter(chapter: string) {
+    setActiveChapter(chapter);
+    setTypeFilter("ALL");
+    setDifficultyFilter("ALL");
+  }
 
   function toggle(index: number) {
     setSelected((prev) => {
@@ -40,6 +56,45 @@ export function ReviewPage({ questions, targets, onFinalize, isSubmitting, error
       return next;
     });
   }
+
+  function selectAll() {
+    setSelected(new Set(questions.map((_, i) => i)));
+  }
+
+  function deselectAll() {
+    setSelected(new Set());
+  }
+
+  const chapterEntries = useMemo(
+    () => questions.map((q, i) => ({ q, i })).filter(({ q }) => q.chapter === activeChapter),
+    [questions, activeChapter]
+  );
+
+  const typeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const { q } of chapterEntries) counts[q.question_type] = (counts[q.question_type] ?? 0) + 1;
+    return counts;
+  }, [chapterEntries]);
+
+  const difficultyCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const { q } of chapterEntries) counts[q.difficulty] = (counts[q.difficulty] ?? 0) + 1;
+    return counts;
+  }, [chapterEntries]);
+
+  const visibleEntries = chapterEntries.filter(
+    ({ q }) =>
+      (typeFilter === "ALL" || q.question_type === typeFilter) &&
+      (difficultyFilter === "ALL" || q.difficulty === difficultyFilter)
+  );
+
+  const chapterSelectedCount = chapterEntries.filter(({ i }) => selected.has(i)).length;
+
+  const selectAllRef = useRef<HTMLInputElement>(null);
+  const allSelected = selected.size === questions.length;
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = selected.size > 0 && !allSelected;
+  }, [selected, allSelected]);
 
   const totalMarks = questions.reduce((sum, q, i) => (selected.has(i) ? sum + q.marks : sum), 0);
   const targetTotal = targets.objective + targets.subjective;
@@ -58,7 +113,7 @@ export function ReviewPage({ questions, targets, onFinalize, isSubmitting, error
             {chapters.map((ch) => (
               <button
                 key={ch}
-                onClick={() => setActiveChapter(ch)}
+                onClick={() => switchChapter(ch)}
                 className={`px-6 py-2 border border-b-0 rounded-t-lg font-label-md whitespace-nowrap ${
                   ch === activeChapter ? "bg-surface-container-lowest text-on-surface border-outline-variant shadow-sm relative z-10" : "bg-surface-container text-on-surface-variant border-outline-variant hover:bg-surface-container-high"
                 }`}
@@ -70,11 +125,72 @@ export function ReviewPage({ questions, targets, onFinalize, isSubmitting, error
         </div>
       </div>
 
+      <div className="bg-surface-container-lowest border-b border-outline-variant px-margin-mobile md:px-margin-desktop py-4">
+        <div className="max-w-container-max mx-auto">
+          <div className="flex flex-wrap items-center gap-3 mb-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                ref={selectAllRef}
+                type="checkbox"
+                checked={allSelected}
+                onChange={() => (allSelected ? deselectAll() : selectAll())}
+                className="h-5 w-5 text-primary rounded border-outline cursor-pointer"
+              />
+              <span className="font-label-md text-label-md text-on-surface">Select All Questions</span>
+            </label>
+            <span className="font-body-sm text-body-sm text-on-surface-variant">
+              ({questions.length} questions across {chapters.length} chapter{chapters.length === 1 ? "" : "s"})
+            </span>
+            <button
+              onClick={selectAll}
+              className="px-3 py-1.5 border border-error text-error font-label-sm rounded hover:bg-error-container/30"
+            >
+              Select All ({questions.length})
+            </button>
+            <button
+              onClick={deselectAll}
+              className="px-3 py-1.5 border border-outline-variant text-on-surface-variant font-label-sm rounded hover:bg-surface-container-high"
+            >
+              Deselect All
+            </button>
+            <span className="font-label-sm text-label-sm text-on-surface-variant lg:ml-auto">
+              Selected in {activeChapter}: <span className="font-bold text-on-surface">{chapterSelectedCount} / {chapterEntries.length}</span>
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wide mr-1">Type:</span>
+            <button onClick={() => setTypeFilter("ALL")} className={pillClass(typeFilter === "ALL")}>
+              All Types ({chapterEntries.length})
+            </button>
+            {Object.entries(typeCounts).map(([type, count]) => (
+              <button key={type} onClick={() => setTypeFilter(type)} className={pillClass(typeFilter === type)}>
+                {TYPE_LABEL[type] ?? type} ({count})
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wide mr-1">Difficulty:</span>
+            <button onClick={() => setDifficultyFilter("ALL")} className={pillClass(difficultyFilter === "ALL")}>
+              All ({chapterEntries.length})
+            </button>
+            {Object.entries(difficultyCounts).map(([difficulty, count]) => (
+              <button key={difficulty} onClick={() => setDifficultyFilter(difficulty)} className={pillClass(difficultyFilter === difficulty)}>
+                {difficulty} ({count})
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="flex-grow bg-surface-container-lowest p-margin-mobile md:p-margin-desktop">
         <div className="max-w-container-max mx-auto flex flex-col lg:flex-row gap-gutter">
           <div className="flex-grow flex flex-col gap-6 lg:w-2/3 pb-24">
-            {questions.map((q, i) => {
-              if (q.chapter !== activeChapter) return null;
+            {visibleEntries.length === 0 && (
+              <p className="font-body-md text-on-surface-variant text-center py-12">No questions match the selected filters.</p>
+            )}
+            {visibleEntries.map(({ q, i }) => {
               const isSelected = selected.has(i);
               return (
                 <div

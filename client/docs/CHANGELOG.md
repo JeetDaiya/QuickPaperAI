@@ -61,3 +61,15 @@ those belong in a commit message or PR description. Never edit or remove old ent
 - **2026-09-13** — Fixed the post-Finalize "Compiling Your Paper…" screen hanging until refresh:
   `useGenerationStatus` closed the reconnected stream on the stale `"awaiting_review"` first
   message despite `waitPastReview`; `isTerminal()` now honors that flag.
+
+- **2026-09-13** — Added "Back to Dashboard" button and background-generation helper text to
+  `ProgressPage` so teachers can leave mid-generation without stopping it and return via Recent Drafts.
+- **2026-09-13** — Fixed `ProgressPage`'s "Synthesizing 1 questions…" line, which read as a
+  question count but was actually the chapter identifier; now lists all chapters currently
+  processing in parallel (was only ever showing the first one found).
+- **2026-09-13** — Fixed the Review screen sometimes arriving blank (no questions) on first
+  reaching `awaiting_review`, requiring a manual refresh; `generate.$threadId.tsx` now detects
+  the empty-questions race and auto-reconnects instead of rendering the empty page.
+- **2026-09-13** — Added a Select All/Deselect All control plus per-chapter type and difficulty
+  filter pills to `ReviewPage`, so reviewing a large generated set doesn't require scrolling
+  through every question by hand.
