@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { SetupPage } from "@/pages/SetupPage";
 import { useAuthGuard } from "@/lib/auth";
-import { clearToken } from "@/lib/api/http";
+import { clearToken, isApiError } from "@/lib/api/http";
 import { useChapters, useGeneratePaper } from "@/hooks/usePaper";
 import { useCurrentUser } from "@/hooks/useAuth";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -19,12 +19,23 @@ function SetupRoute() {
   const currentUserQuery = useCurrentUser();
   const generateMutation = useGeneratePaper();
 
+  // The free-tier quota gate on POST /api/generate raises this with a specific, already-correct
+  // reason — append the requested CTA rather than replacing it, so it applies uniformly however
+  // that detail text varies (never string-match `.message` to detect this, use `.code`).
+  const submitError = generateMutation.error
+    ? isApiError(generateMutation.error) && generateMutation.error.code === "PERMISSION_ERROR"
+      ? `${generateMutation.error.message} Contact the developer to get access for more generations.`
+      : generateMutation.error.message
+    : undefined;
+
   return (
     <SetupPage
       chapters={chaptersQuery.data ?? []}
       userName={currentUserQuery.data?.name}
       userEmail={currentUserQuery.data?.email}
       isSubmitting={generateMutation.isPending}
+      isSuperuser={currentUserQuery.data?.is_superuser}
+      error={submitError}
       onSubmit={(payload) => {
         generateMutation.mutate(payload, {
           onSuccess: (data) => {

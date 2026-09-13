@@ -18,6 +18,16 @@ If you hit something new and non-obvious, add a line here — don't bury it in a
   `\f`/`\b` → `\rho`/`\theta`/`\frac`/`\beta` *are* recovered).
 - 2-mark / 4-mark subjective questions get skipped in favor of 3-mark by default — needs
   explicit few-shot examples and a quota directive in the prompt, not just a count.
+- `PaperRequest.objective_count`/`subjective_count` are **per topic-batch within a chapter, not a
+  total for the paper** — `router_node` fans out per chapter, and `question_generator_node` (both
+  `src/paper/graph/nodes.py`) reuses the same count unchanged for every sub-topic batch inside
+  that chapter (`build_quota_instructions` is called once per chapter but its "EXACTLY N
+  questions" instruction is sent to the LLM once per batch in the loop). So the real number of
+  questions in a finished paper is roughly `count × topics_per_chapter × num_chapters`, not
+  `count`. The frontend's own UI copy already says this correctly ("Counts apply per topic within
+  each chapter — not the whole chapter or the entire paper") — don't treat the `le=10` schema cap
+  on these fields as a whole-paper limit when reasoning about cost/abuse; it bounds the per-topic
+  request, not the total questions a superuser's multi-chapter paper can produce.
 
 ## Auth
 - `bcrypt` must stay pinned to `3.2.2` with `passlib` — `bcrypt>=5.0.0` breaks
@@ -27,6 +37,9 @@ If you hit something new and non-obvious, add a line here — don't bury it in a
   (`otp:{purpose}:{email}`, and likewise for cooldown/attempts/lockout keys) — a code issued
   for one purpose cannot verify the other. OTPs are stored SHA-256-hashed and compared with
   `hmac.compare_digest`; every OTP-store call must pass `purpose`.
+- `first_n_chapter_names` (`src/paper/quota.py`), used by the free-tier chapter gate, assumes
+  every `chapter_name` is a plain integer string and sorts via `int()` — an ingested chapter with
+  a non-numeric name will raise there, not fail gracefully.
 
 ## Async / infra
 - Playwright: must use `async_playwright` / `async_api`, never the sync API — sync calls inside
@@ -107,3 +120,16 @@ If you hit something new and non-obvious, add a line here — don't bury it in a
   ...}` is a different thing — a legitimate polling/state-machine value, not an error envelope —
   and is intentionally unchanged; don't conflate the two or "fix" the status endpoint by mistake.
   See `src/docs/ROADMAP.md` for the rest of this migration.
+- `PaperService.download_file` validates `filename` against `GENERATED_DOCUMENT_TYPES` **before**
+  touching the filesystem — this closed a path-traversal hole where a logged-in user could pass
+  `filename=../../../../etc/passwd` and read arbitrary server files, since the local-cache-hit
+  branch used to build the path before any whitelist check ran. If this endpoint is ever
+  refactored, keep the filename check as the very first line.
+- `POST /auth/register` and `POST /auth/send-email` are throttled per client IP
+  (`ip_rate_limit` in `src/auth/dependencies.py`, Redis-backed via `RedisIPRateLimiter`) on top of
+  the existing per-email OTP cooldown — without it, the free-tier chapter quota (keyed on
+  `user_id`) was trivially resettable by registering a new account. `get_client_ip` reads the
+  **last** entry of `X-Forwarded-For`, not the first — Caddy appends the real client IP rather
+  than replacing the header, so the first entry is attacker-supplied and trivially spoofable
+  (send a random fake leading value to get a fresh bucket every request). If a second proxy is
+  ever added in front of Caddy, this needs a trusted-hop-count, not a hardcoded `[-1]`.

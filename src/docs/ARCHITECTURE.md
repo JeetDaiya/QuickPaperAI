@@ -85,6 +85,22 @@ START → distribute → [Send: per chapter, parallel]
   `/save-to-cloud`, `/cancel`) — checks `session.user_id == current_user["id"]`, 403 on
   mismatch. `extract_user_id` in `src/auth/dependencies.py` centralizes the `"id"` vs `"user_id"`
   key resolution.
+- **Free-tier chapter quota**: `users.is_superuser` (defaults `false`) gates `POST /api/generate`
+  via the `enforce_generation_quota` dependency (`src/auth/dependencies.py`). Superusers are
+  unrestricted on subject/chapter selection; everyone else is locked, for the lifetime of the
+  account, to a single subject and at most 2 distinct chapters — both of which must be that
+  subject's two lowest-numbered chapters (`first_n_chapter_names` in `src/paper/quota.py`, sorted
+  via `int(chapter_name)` since chapter names are plain numeric strings). There's no separate
+  usage table: it reads the existing `generated_papers` rows for the user (any status — a
+  failed/in-progress attempt already cost compute) via `PaperRepository.get_user_generation_records`.
+  `is_superuser` is surfaced to the frontend on `GET /auth/me` (`UserResponse.is_superuser`) and is
+  granted manually via direct Supabase edits — there's no self-serve upgrade path.
+- `PaperGenerateRequest`/`PaperRequest.objective_count`/`subjective_count` are capped at 10 each
+  (`ge=0, le=10`) as a flat schema-level bound that applies to **every** user, superusers
+  included — a deliberate product decision, not just an abuse-prevention ceiling. Unlike the
+  chapter/subject restriction above, this one is intentionally *not* tier-gated. Note this caps
+  the count **per topic-batch within a chapter, not the whole paper** — see GOTCHAS.md's Gemini/LLM
+  section before assuming 10 bounds total paper size.
 
 ## Clean Architecture layers
 All cross-cutting capabilities are `interfaces/` + swappable `adapters/`:
@@ -94,6 +110,7 @@ All cross-cutting capabilities are `interfaces/` + swappable `adapters/`:
 | Users/chunks/papers | `UserRepository`, `ChunkRepository`, `PaperRepository` | `Supabase*Repository` (uses service-role key, bypasses RLS — routes must enforce ownership themselves) |
 | File storage | `StorageService` | `LocalStorageService` (temp/cache), `SupabaseStorageService` (permanent) |
 | OTP | `OTPStore` | `MemoryOTPStore` (dev fallback), `RedisOTPStore` (Upstash, prod) |
+| Per-IP rate limiting | `IPRateLimiter` | `RedisIPRateLimiter` (Upstash) — used on `/auth/register` and `/auth/send-email` via the `ip_rate_limit` dependency factory (`src/auth/dependencies.py`) |
 | Email | `EmailService` | `FastMailService` (`fastapi-mail==1.6.4`, pinned) |
 | Paper rendering | `PaperFormatter` | `HTMLPaperFormatter` (KaTeX), `MarkdownPaperFormatter` |
 | PDF/DOCX compilation | `DocumentCompiler` | `CustomDocumentCompiler` (Playwright + Pandoc) |
@@ -135,7 +152,7 @@ anywhere, that's dead/historical, not current.)
 chunks(id, standard, subject, chapter_name, sub_topic, chunk_index, content,
        has_image, image_urls[], UNIQUE(standard, subject, chapter_name, chunk_index))
 
-users(id uuid pk, email unique, hashed_password, name, is_active, created_at, updated_at)
+users(id uuid pk, email unique, hashed_password, name, is_active, is_superuser, created_at, updated_at)
 
 generated_papers(id, user_id → users.id, thread_id, institution_name, subject, standard,
                   difficulty, chapters[], objective_count, subjective_count, allowed_types[],

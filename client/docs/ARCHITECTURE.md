@@ -50,7 +50,9 @@ File name → URL path (dots = nesting, `$param` = dynamic segment):
   `purpose`, `token`), validated with `validateSearch`.
 - `dashboard.tsx` — Cloud Vault (saved papers, from `GET /api/db/history`) + Recent Drafts
   (client-only, see below) + notification settings.
-- `generate.setup.tsx` — the paper configuration form.
+- `generate.setup.tsx` — the paper configuration form. Also mirrors the backend's free-tier
+  "first 2 chapters of a subject" cap client-side (cosmetic only, for non-superusers — see
+  `docs/GOTCHAS.md`) and surfaces `PERMISSION_ERROR` 403s from generation.
 - `generate.$threadId.tsx` — the single container that renders Progress → Review → Downloads
   depending on live SSE status. This is the most stateful file in the app; read it and
   `useGenerationStatus.ts` together before changing either.

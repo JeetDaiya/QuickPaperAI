@@ -86,8 +86,8 @@ class PaperRequest(BaseModel):
     standard: str
     difficulty: Literal["Easy", "Balanced", "Hard"]
     chapters: list[str]
-    objective_count: int = Field(default=0, description="Total number of objective questions to generate.")
-    subjective_count: int = Field(default=0, description="Total number of subjective questions to generate.")
+    objective_count: int = Field(default=0, ge=0, le=10, description="Total number of objective questions to generate.")
+    subjective_count: int = Field(default=0, ge=0, le=10, description="Total number of subjective questions to generate.")
     allowed_types: list[QuestionTypes] = Field(
         default_factory=lambda: list(QuestionTypes),
         description="List of allowed question types for this paper request."

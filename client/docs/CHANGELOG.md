@@ -73,3 +73,7 @@ those belong in a commit message or PR description. Never edit or remove old ent
 - **2026-09-13** — Added a Select All/Deselect All control plus per-chapter type and difficulty
   filter pills to `ReviewPage`, so reviewing a large generated set doesn't require scrolling
   through every question by hand.
+- **2026-09-13** — Surfaced the backend's free-tier generation quota on the frontend: added
+  `is_superuser` to `UserResponse`/`api-contract.md`, `SetupPage` now greys out chapters beyond
+  a subject's free-tier cap for non-superusers, and a `PERMISSION_ERROR` 403 on submit shows the
+  backend's reason plus a "contact the developer" note.

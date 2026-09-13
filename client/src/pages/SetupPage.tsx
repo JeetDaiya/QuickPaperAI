@@ -10,7 +10,7 @@ import {
   PAPER_TYPE_MODES,
   type PaperTypeMode,
 } from "@/lib/paper-config";
-import { sortNatural } from "@/lib/utils";
+import { firstNChapterNames, sortNatural } from "@/lib/utils";
 import type { ChapterInfo, DifficultyDistribution, PaperGenerateRequest, QuestionType } from "@/lib/api/types";
 
 export interface SetupPageProps {
@@ -19,11 +19,23 @@ export interface SetupPageProps {
   userName?: string;
   userEmail?: string;
   isSubmitting: boolean;
+  isSuperuser?: boolean;
+  error?: string;
   onSubmit: (payload: PaperGenerateRequest) => void;
   onSignOut: () => void;
 }
 
-export function SetupPage({ chapters, schoolName, userName, userEmail, isSubmitting, onSubmit, onSignOut }: SetupPageProps) {
+export function SetupPage({
+  chapters,
+  schoolName,
+  userName,
+  userEmail,
+  isSubmitting,
+  isSuperuser,
+  error,
+  onSubmit,
+  onSignOut,
+}: SetupPageProps) {
   const [institutionName, setInstitutionName] = useState(schoolName ?? "");
   const [subject, setSubject] = useState("");
   const [standard, setStandard] = useState("");
@@ -31,7 +43,11 @@ export function SetupPage({ chapters, schoolName, userName, userEmail, isSubmitt
   const [distribution, setDistribution] = useState<DifficultyDistribution>(DIFFICULTY_PRESETS.balanced.distribution);
   const [paperTypeMode, setPaperTypeMode] = useState<PaperTypeMode>("standard");
   const [allowedTypes, setAllowedTypes] = useState<QuestionType[]>(ALL_QUESTION_TYPES);
-  const [objectiveCount, setObjectiveCount] = useState(20);
+  // Mirrors the backend's flat per-type cap (../QuickPaperAI/src/paper/schemas.py,
+  // PaperGenerateRequest.objective_count/subjective_count, `le=10`) — applies to every account,
+  // superusers included, so there's no isSuperuser branch here.
+  const MAX_QUESTIONS_PER_TYPE = 10;
+  const [objectiveCount, setObjectiveCount] = useState(MAX_QUESTIONS_PER_TYPE);
   const [subjectiveCount, setSubjectiveCount] = useState(5);
 
   const isCustomMode = paperTypeMode === "custom";
@@ -56,6 +72,16 @@ export function SetupPage({ chapters, schoolName, userName, userEmail, isSubmitt
     const deduped = [...new Map(filtered.map((c) => [c.chapter_name, c])).values()];
     return sortNatural(deduped, (c) => c.chapter_name);
   }, [chapters, subject, standard]);
+
+  // `null` = unrestricted (superuser). `isSuperuser` is `undefined` while `/auth/me` is still
+  // loading, so this fails closed by default rather than flashing every chapter enabled first.
+  // A chapter already selected before a mid-session downgrade could stay checked-but-locked —
+  // not worth a pruning effect for that race; the backend enforces this regardless (see the
+  // reactive `error` prop) so a stale client-side selection can never actually get through.
+  const allowedChapterNames = useMemo(
+    () => (isSuperuser ? null : new Set(firstNChapterNames(availableChapters.map((c) => c.chapter_name), 2))),
+    [availableChapters, isSuperuser],
+  );
 
   const distributionSum = distribution.easy + distribution.medium + distribution.hard;
 
@@ -164,21 +190,33 @@ export function SetupPage({ chapters, schoolName, userName, userEmail, isSubmitt
               </div>
 
               <label className="font-label-md text-label-md text-on-surface-variant mb-2 block">Syllabus Inclusion (Select Chapters)</label>
+              {allowedChapterNames !== null && allowedChapterNames.size < availableChapters.length && (
+                <p className="font-label-sm text-[11px] text-on-surface-variant flex items-center gap-1 mb-2">
+                  <span className="material-symbols-outlined text-[14px]">lock</span>
+                  Free tier — limited to the first 2 chapters of a subject.
+                </p>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {availableChapters.map((c) => (
-                  <label
-                    key={c.chapter_name}
-                    className="flex items-start p-3 border border-outline-variant rounded bg-surface-container-lowest hover:bg-surface-container-low transition-colors cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      className="mt-1 rounded text-primary focus:ring-primary border-outline-variant"
-                      checked={selectedChapters.includes(c.chapter_name)}
-                      onChange={() => toggleChapter(c.chapter_name)}
-                    />
-                    <span className="ml-3 block font-label-md text-label-md text-on-surface font-semibold">{c.chapter_name}</span>
-                  </label>
-                ))}
+                {availableChapters.map((c) => {
+                  const isLocked = allowedChapterNames !== null && !allowedChapterNames.has(c.chapter_name);
+                  return (
+                    <label
+                      key={c.chapter_name}
+                      className={`flex items-start p-3 border border-outline-variant rounded bg-surface-container-lowest transition-colors ${
+                        isLocked ? "opacity-70 cursor-not-allowed" : "hover:bg-surface-container-low cursor-pointer"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-1 rounded text-primary focus:ring-primary border-outline-variant"
+                        checked={selectedChapters.includes(c.chapter_name)}
+                        disabled={isLocked}
+                        onChange={() => toggleChapter(c.chapter_name)}
+                      />
+                      <span className="ml-3 block font-label-md text-label-md text-on-surface font-semibold">{c.chapter_name}</span>
+                    </label>
+                  );
+                })}
                 {availableChapters.length === 0 && (
                   <p className="font-body-md text-on-surface-variant col-span-2">Select a subject and standard to see chapters.</p>
                 )}
@@ -361,8 +399,9 @@ export function SetupPage({ chapters, schoolName, userName, userEmail, isSubmitt
                       <input
                         type="number"
                         min={0}
+                        max={MAX_QUESTIONS_PER_TYPE}
                         value={objectiveCount}
-                        onChange={(e) => setObjectiveCount(Number(e.target.value))}
+                        onChange={(e) => setObjectiveCount(Math.min(MAX_QUESTIONS_PER_TYPE, Math.max(0, Number(e.target.value))))}
                         className="input-line text-4xl font-display-lg text-primary w-24 text-center"
                       />
                     </div>
@@ -373,8 +412,9 @@ export function SetupPage({ chapters, schoolName, userName, userEmail, isSubmitt
                       <input
                         type="number"
                         min={0}
+                        max={MAX_QUESTIONS_PER_TYPE}
                         value={subjectiveCount}
-                        onChange={(e) => setSubjectiveCount(Number(e.target.value))}
+                        onChange={(e) => setSubjectiveCount(Math.min(MAX_QUESTIONS_PER_TYPE, Math.max(0, Number(e.target.value))))}
                         className="input-line text-4xl font-display-lg text-secondary w-24 text-center"
                       />
                     </div>
@@ -383,20 +423,28 @@ export function SetupPage({ chapters, schoolName, userName, userEmail, isSubmitt
               </div>
             </div>
 
-            <div className="pt-8 flex justify-end gap-4">
-              <button
-                type="submit"
-                disabled={
-                  isSubmitting ||
-                  distributionSum !== 100 ||
-                  selectedChapters.length === 0 ||
-                  (!hasObjectiveSelected && !hasSubjectiveSelected)
-                }
-                className="px-8 py-3 bg-primary-container text-on-primary-container rounded font-label-md text-label-md font-bold stamp-shadow hover:opacity-90 transition-opacity flex items-center gap-2 disabled:opacity-60"
-              >
-                <span className="material-symbols-outlined">bolt</span>
-                {isSubmitting ? "Starting…" : "Generate Paper"}
-              </button>
+            <div className="pt-8 flex flex-col items-end gap-3">
+              {error && (
+                <p className="font-label-sm text-label-sm text-error flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[16px]">error</span>
+                  {error}
+                </p>
+              )}
+              <div className="flex justify-end gap-4">
+                <button
+                  type="submit"
+                  disabled={
+                    isSubmitting ||
+                    distributionSum !== 100 ||
+                    selectedChapters.length === 0 ||
+                    (!hasObjectiveSelected && !hasSubjectiveSelected)
+                  }
+                  className="px-8 py-3 bg-primary-container text-on-primary-container rounded font-label-md text-label-md font-bold stamp-shadow hover:opacity-90 transition-opacity flex items-center gap-2 disabled:opacity-60"
+                >
+                  <span className="material-symbols-outlined">bolt</span>
+                  {isSubmitting ? "Starting…" : "Generate Paper"}
+                </button>
+              </div>
             </div>
           </form>
         </div>

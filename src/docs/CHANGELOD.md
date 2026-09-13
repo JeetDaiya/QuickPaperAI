@@ -75,3 +75,16 @@ explaining, that belongs in a commit message, not here. If it's still true today
 - Split the 302-line `src/dependencies.py` into per-domain `dependencies.py` files
   (`auth/`, `db/`, `storage/`, `mail/`, `notifications/`, `paper/`) plus a top-level
   `src/lifespan.py`; the monolithic file is removed.
+- Added a free-tier chapter quota for non-superusers on `POST /api/generate`: locked to one
+  subject and the subject's first 2 chapters, lifetime cap of 2 distinct chapters
+  (`enforce_generation_quota` in `src/auth/dependencies.py`); `is_superuser` now surfaced on
+  `GET /auth/me`.
+- Pre-LinkedIn-launch hardening: fixed an authenticated path-traversal bug in
+  `PaperService.download_file` (filename wasn't validated before touching the filesystem); added
+  per-IP Redis rate limiting on `/auth/register` and `/auth/send-email`
+  (`RedisIPRateLimiter`/`ip_rate_limit`, fixed-window so blocked traffic can't push the window out
+  indefinitely) so the new chapter quota can't be reset by mass registration; capped
+  `objective_count`/`subjective_count` at 10 each for every user, superusers included (flat
+  product decision, not tier-gated); added a root-level `errorComponent` on the frontend router so
+  an uncaught error shows a reload prompt instead of a blank screen (verified live in a browser
+  via a temporary forced error).
