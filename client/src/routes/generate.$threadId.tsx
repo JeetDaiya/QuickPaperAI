@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ProgressPage } from "@/pages/ProgressPage";
 import { ReviewPage } from "@/pages/ReviewPage";
 import { DownloadsPage } from "@/pages/DownloadsPage";
@@ -63,7 +63,7 @@ function GenerationRoute() {
   // Bumping `reconnectKey` forces the hook to open a fresh one right when we resume, instead
   // of leaving the dead connection to be rediscovered only on a manual page refresh.
   const [reconnectKey, setReconnectKey] = useState(0);
-  const hasResumed = reconnectKey > 0;
+  const [hasResumed, setHasResumed] = useState(false);
   const { data: status, error, isLoading } = useGenerationStatus(threadId, reconnectKey, hasResumed);
   const cancelMutation = useCancelGeneration();
   const resumeMutation = useResumeGeneration();
@@ -74,6 +74,24 @@ function GenerationRoute() {
   useEffect(() => {
     if (status?.status) updateDraftStatus(threadId, draftLabelFor(status.status));
   }, [threadId, status?.status]);
+
+  // The backend can report "awaiting_review" a moment before the graph checkpoint it reads
+  // from actually has the review interrupt's question payload attached (the last chapter's
+  // progress update — which wakes this SSE connection's status check — lands slightly before
+  // the graph engine hands off to the review node). That race produced an empty question list
+  // that only ever fixed itself on a manual refresh. Reconnecting picks up the now-settled
+  // checkpoint; capped so a genuinely empty paper doesn't retry forever.
+  const emptyReviewRetries = useRef(0);
+  useEffect(() => {
+    if (hasResumed || status?.status !== "awaiting_review" || status.questions.length > 0) {
+      emptyReviewRetries.current = 0;
+      return;
+    }
+    if (emptyReviewRetries.current >= 3) return;
+    emptyReviewRetries.current += 1;
+    const timer = setTimeout(() => setReconnectKey((k) => k + 1), 1000);
+    return () => clearTimeout(timer);
+  }, [status, hasResumed]);
 
   function handleCancel() {
     cancelMutation.mutate(threadId, {
@@ -86,7 +104,15 @@ function GenerationRoute() {
   }
 
   if (isLoading || !status) {
-    return <ProgressPage paperTitle="New Exam Paper" progress={{}} onCancel={handleCancel} isCancelling={cancelMutation.isPending} />;
+    return (
+      <ProgressPage
+        paperTitle="New Exam Paper"
+        progress={{}}
+        onCancel={handleCancel}
+        isCancelling={cancelMutation.isPending}
+        onGoHome={() => navigate({ to: "/dashboard" })}
+      />
+    );
   }
 
   // Both "completed" and "failed" are terminal — the stream closing itself afterwards isn't
@@ -115,6 +141,19 @@ function GenerationRoute() {
   }
 
   if (status.status === "awaiting_review") {
+    // See the empty-review-retry effect above — while it's still reconnecting to pick up the
+    // settled checkpoint, show the loading state instead of a Review screen with no questions.
+    if (status.questions.length === 0) {
+      return (
+        <ProgressPage
+          paperTitle="New Exam Paper"
+          progress={{}}
+          onCancel={handleCancel}
+          isCancelling={cancelMutation.isPending}
+          onGoHome={() => navigate({ to: "/dashboard" })}
+        />
+      );
+    }
     return (
       <ReviewPage
         questions={status.questions}
@@ -122,7 +161,10 @@ function GenerationRoute() {
         isSubmitting={resumeMutation.isPending}
         error={resumeMutation.error?.message}
         onFinalize={(selectedIndices) =>
-          resumeMutation.mutate({ threadId, selectedIndices }, { onSuccess: () => setReconnectKey((k) => k + 1) })
+          resumeMutation.mutate(
+            { threadId, selectedIndices },
+            { onSuccess: () => { setHasResumed(true); setReconnectKey((k) => k + 1); } }
+          )
         }
       />
     );
@@ -221,6 +263,7 @@ function GenerationRoute() {
       progress={"progress" in status ? status.progress ?? {} : {}}
       onCancel={handleCancel}
       isCancelling={cancelMutation.isPending}
+      onGoHome={() => navigate({ to: "/dashboard" })}
     />
   );
 }

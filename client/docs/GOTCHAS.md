@@ -38,6 +38,17 @@ If you hit something new and non-obvious, add a line here — don't bury it in a
   latches permanently even after the connection actually recovers.
 - The SSE URL carries the auth token as `?token=`, never a header — `EventSource` can't set
   custom headers. See `withToken()`/`resolveFileUrl()` in `lib/api/http.ts`.
+- The backend can also report the *initial* `"awaiting_review"` a moment before the graph
+  checkpoint actually has the review interrupt's `questions` attached — the last chapter's
+  progress update (which wakes the backend's SSE connection to re-check status) lands slightly
+  before the graph hands off to the review node, and the backend's stream closes on that first
+  read regardless (`awaiting_review` is always a close status when not `wait_past_review`), so
+  there's no second chance on that same connection. `generate.$threadId.tsx` detects
+  `status === "awaiting_review" && questions.length === 0`, shows the loading state instead of
+  a blank Review screen, and bumps `reconnectKey` (capped at 3 attempts, 1s apart) to open a
+  fresh connection against the by-then-settled checkpoint. This is the same class of race as the
+  post-resume one above, just unhandled on the very first transition — a real backend fix would
+  be to not report `awaiting_review` until the interrupt payload is actually present.
 
 ## Vercel deploy
 - This is a client-side-routed SPA (TanStack Router, no server). Vercel's static file server

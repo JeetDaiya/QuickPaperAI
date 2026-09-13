@@ -112,7 +112,7 @@ for the exact `&` vs `?` rule.
 `generate.$threadId.tsx` drives everything off `useGenerationStatus(threadId, reconnectKey)`:
 
 1. `POST /api/generate` → navigate here with the new `thread_id`.
-2. SSE pushes `generating` → renders `ProgressPage` with live chapter progress.
+2. SSE pushes `generating` → renders `ProgressPage` with live chapter progress (the teacher can navigate back to the dashboard mid-generation without stopping background processing, returning anytime via Recent Drafts).
 3. SSE pushes `awaiting_review` → renders `ReviewPage`. The backend's own SSE generator ends
    its HTTP response at this point (it's in the backend's `TERMINAL_STATUSES`), and our hook
    closes to match.

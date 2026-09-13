@@ -6,6 +6,7 @@ export interface ProgressPageProps {
   progress: Record<string, ChapterProgress>;
   onCancel: () => void;
   isCancelling: boolean;
+  onGoHome: () => void;
 }
 
 const STATUS_META: Record<ChapterStatus, { label: string; icon: string; badgeClass: string }> = {
@@ -15,12 +16,12 @@ const STATUS_META: Record<ChapterStatus, { label: string; icon: string; badgeCla
   failed: { label: "Failed", icon: "error", badgeClass: "bg-error-container border border-error text-on-error-container" },
 };
 
-export function ProgressPage({ paperTitle, progress, onCancel, isCancelling }: ProgressPageProps) {
+export function ProgressPage({ paperTitle, progress, onCancel, isCancelling, onGoHome }: ProgressPageProps) {
   const chapters = sortNatural(Object.values(progress), (c) => c.chapter);
   const totalGenerated = chapters.reduce((sum, c) => sum + c.generated_count, 0);
   const completedCount = chapters.filter((c) => c.status === "completed").length;
   const overallPct = chapters.length ? Math.round((completedCount / chapters.length) * 100) : 0;
-  const activeChapter = chapters.find((c) => c.status === "processing");
+  const activeChapters = chapters.filter((c) => c.status === "processing");
 
   return (
     <main className="w-full max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop py-12 flex flex-col items-center">
@@ -45,11 +46,11 @@ export function ProgressPage({ paperTitle, progress, onCancel, isCancelling }: P
         <div className="w-full h-4 bg-surface-container-high rounded-full overflow-hidden border border-outline-variant">
           <div className="h-full bg-primary rounded-full transition-all duration-1000 ease-out" style={{ width: `${overallPct}%` }} />
         </div>
-        {activeChapter && (
+        {activeChapters.length > 0 && (
           <div className="mt-4 flex justify-between items-center text-sm">
             <span className="font-label-md text-label-md text-on-surface-variant flex items-center gap-2">
               <span className="material-symbols-outlined text-[16px] animate-spin">hourglass_empty</span>
-              Synthesizing {activeChapter.chapter} questions…
+              {activeChapters.length > 1 ? "Chapters" : "Chapter"} {activeChapters.map((c) => c.chapter).join(", ")} generating…
             </span>
           </div>
         )}
@@ -90,15 +91,27 @@ export function ProgressPage({ paperTitle, progress, onCancel, isCancelling }: P
         })}
       </div>
 
-      <div className="mt-auto pb-8 flex flex-col items-center">
-        <button
-          onClick={onCancel}
-          disabled={isCancelling}
-          className="px-6 py-3 border border-outline-variant text-on-surface-variant hover:text-error hover:border-error hover:bg-error-container font-label-md text-label-md transition-colors duration-200 flex items-center gap-2 rounded-sm bg-surface stamp-shadow disabled:opacity-60"
-        >
-          <span className="material-symbols-outlined text-[18px]">cancel</span>
-          {isCancelling ? "Cancelling…" : "Cancel Generation"}
-        </button>
+      <div className="mt-auto pb-8 flex flex-col items-center gap-4 text-center">
+        <p className="font-body-sm text-body-sm text-on-surface-variant max-w-md">
+          Generation keeps running in the background. You can find this paper under Recent Drafts on your dashboard.
+        </p>
+        <div className="flex flex-wrap justify-center gap-4">
+          <button
+            onClick={onGoHome}
+            className="px-6 py-3 border border-outline-variant text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors duration-200 flex items-center gap-2 rounded-sm bg-surface stamp-shadow"
+          >
+            <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+            Back to Dashboard
+          </button>
+          <button
+            onClick={onCancel}
+            disabled={isCancelling}
+            className="px-6 py-3 border border-outline-variant text-on-surface-variant hover:text-error hover:border-error hover:bg-error-container font-label-md text-label-md transition-colors duration-200 flex items-center gap-2 rounded-sm bg-surface stamp-shadow disabled:opacity-60"
+          >
+            <span className="material-symbols-outlined text-[18px]">cancel</span>
+            {isCancelling ? "Cancelling…" : "Cancel Generation"}
+          </button>
+        </div>
       </div>
     </main>
   );
