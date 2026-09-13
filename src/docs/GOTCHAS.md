@@ -36,7 +36,7 @@ If you hit something new and non-obvious, add a line here — don't bury it in a
 - Postgrest's Python client has no `.distinct()` on select — dedupe chapter lists in Python.
 - LangGraph checkpoint state: every Pydantic type that can appear inside graph state
   (`PaperRequest`, `Question`, `EvaluationPoint`, `DifficultyDistribution`, enums, etc.) must be
-  explicitly registered in the `JsonPlusSerializer` allow-list in **both** `src/dependencies.py`
+  explicitly registered in the `JsonPlusSerializer` allow-list in **both** `src/lifespan.py`
   and `src/paper/worker/settings.py` — they must stay identical. Missing types cause silent
   deserialization failures on resume. Plain `dict`/`list` fields (e.g. `PaperState.errors`) do
   **not** need registration — only custom Pydantic types do. Don't "fix" this by wrapping errors

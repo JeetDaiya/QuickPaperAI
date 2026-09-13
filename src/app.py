@@ -2,7 +2,7 @@ import traceback
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from src.dependencies import lifespan
+from src.lifespan import lifespan
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.errors import ServerErrorMiddleware
 from src.base_settings import settings

@@ -6,16 +6,9 @@ from arq.connections import RedisSettings
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from src.base_settings import settings
-from src.dependencies import (
-    get_notification_service,
-    get_progress_tracker,
-    get_chunk_repository,
-    get_html_formatter,
-    get_markdown_formatter,
-    get_document_compiler,
-    get_paper_repository,
-    get_user_repository,
-)
+from src.notifications.dependencies import get_notification_service
+from src.db.dependencies import get_chunk_repository, get_paper_repository, get_user_repository
+from src.paper.dependencies import get_progress_tracker, get_html_formatter, get_markdown_formatter, get_document_compiler
 from src.paper.graph.builder import graph
 from src.paper.worker.tasks import generate_paper_task, resume_paper_task, MAX_TRIES
 
