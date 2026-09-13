@@ -75,6 +75,7 @@ class WorkerSettings:
             ("src.paper.models", "ChapterStatus"),
             ("src.paper.models", "DocumentType"),
             ("src.paper.models", "SubjectType"),
+            ("src.paper.models", "PaperDifficulty"),
         ]
 
         serde = JsonPlusSerializer(allowed_msgpack_modules=allowed_types)
