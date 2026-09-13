@@ -72,3 +72,6 @@ explaining, that belongs in a commit message, not here. If it's still true today
 - Added `PaperDifficulty` to the checkpoint `JsonPlusSerializer` allow-list in both
   `src/dependencies.py` and `src/paper/worker/settings.py`, silencing the "Blocked
   deserialization" warning.
+- Split the 302-line `src/dependencies.py` into per-domain `dependencies.py` files
+  (`auth/`, `db/`, `storage/`, `mail/`, `notifications/`, `paper/`) plus a top-level
+  `src/lifespan.py`; the monolithic file is removed.

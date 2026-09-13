@@ -83,7 +83,7 @@ START → distribute → [Send: per chapter, parallel]
 - **Tenant isolation (BOLA/IDOR)**: `verify_thread_ownership` FastAPI dependency enforced on
   every `thread_id`-parameterized route (`/resume`, `/status/stream`, `/download`,
   `/save-to-cloud`, `/cancel`) — checks `session.user_id == current_user["id"]`, 403 on
-  mismatch. `extract_user_id` in `src/dependencies.py` centralizes the `"id"` vs `"user_id"`
+  mismatch. `extract_user_id` in `src/auth/dependencies.py` centralizes the `"id"` vs `"user_id"`
   key resolution.
 
 ## Clean Architecture layers
@@ -109,15 +109,19 @@ Formatters/compiler are injected into graph nodes via `GraphConfig` (`RunnableCo
 QuickPaperAI/
 ├── src/
 │   ├── auth/        # interface/, adapters/ (JWT+bcrypt, RedisOTPStore), services/ (use-case
-│   │                #   layer), routes/, schemas
+│   │                #   layer), routes/, schemas, dependencies.py (DI providers + get_current_user,
+│   │                #   verify_thread_ownership)
 │   ├── paper/        # models, schemas, service, task_manager, rate_limiter, routes/,
-│   │                #   graph/ (builder, nodes, state, tracker, utils), formatters/, compilers/
-│   ├── db/           # interfaces/, adapters/ (Supabase), services/, routes/
-│   ├── storage/       # interfaces/, adapters/ (local, supabase)
-│   ├── mail/          # interfaces/, adapters/ (fastmail)
+│   │                #   graph/ (builder, nodes, state, tracker, utils), formatters/, compilers/,
+│   │                #   dependencies.py (formatters/compiler/progress-tracker/ARQ/paper-service DI)
+│   ├── db/           # interfaces/, adapters/ (Supabase), services/, routes/, dependencies.py
+│   │                #   (supabase_client + repo/DBService DI)
+│   ├── storage/       # interfaces/, adapters/ (local, supabase), dependencies.py
+│   ├── mail/          # interfaces/, adapters/ (fastmail), dependencies.py
+│   ├── notifications/  # adapters/ (Firebase), dependencies.py
 │   ├── exception/      # AppError hierarchy + global FastAPI exception handler
 │   ├── config/         # settings.py (LLM + fallback chains), prompts.py
-│   ├── base_settings.py, dependencies.py, app.py, main.py
+│   ├── base_settings.py, lifespan.py, app.py, main.py
 ├── scripts/            # parse_textbooks.ipynb, run_cli.py, recover_paper.py
 ├── data/Std_10_Chapters/
 ├── outputs/            # local PDF/DOCX cache (gitignored)

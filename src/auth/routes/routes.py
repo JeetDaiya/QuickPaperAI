@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from src.auth.services.service import AuthService
 from src.mail.interfaces.interface import EmailService
-from src.dependencies import get_current_user, \
+from src.auth.dependencies import get_current_user, \
     get_auth_service
 from src.auth.user_schemas import (
     UserRegister, UserResponse, EmailRequest, OTPVerification, 

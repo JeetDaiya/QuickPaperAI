@@ -6,7 +6,8 @@ from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
 from src.paper.schemas import PaperGenerateRequest
-from src.dependencies import get_current_user, get_paper_service, verify_thread_ownership, extract_user_id, get_pubsub_redis
+from src.auth.dependencies import get_current_user, verify_thread_ownership, extract_user_id
+from src.paper.dependencies import get_paper_service, get_pubsub_redis
 from src.paper.service import PaperService
 
 TERMINAL_STATUSES = ("completed", "failed", "awaiting_review")
