@@ -13,9 +13,12 @@ export interface UseGenerationStatusReturn {
 // generator ends that HTTP response itself. "awaiting_review" is only a pause, not a stop:
 // after the caller resumes generation, the backend keeps working and will eventually push
 // "completed" — but only to a connection that's still open. See `reconnectKey` below.
-const isTerminal = (s?: string) => s === "completed" || s === "failed" || s === "awaiting_review";
+// With `waitPastReview` the backend keeps the stream open past "awaiting_review" (its first read
+// right after resume is often still the stale checkpoint), so we must not close on it either.
+const isTerminal = (s: string | undefined, waitPastReview: boolean) =>
+  s === "completed" || s === "failed" || (!waitPastReview && s === "awaiting_review");
 
-export function useGenerationStatus(threadId: string, reconnectKey: number = 0): UseGenerationStatusReturn {
+export function useGenerationStatus(threadId: string, reconnectKey: number = 0, waitPastReview: boolean = false): UseGenerationStatusReturn {
   const [data, setData] = useState<StatusResponse | undefined>(undefined);
   const [error, setError] = useState<Error | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -29,7 +32,7 @@ export function useGenerationStatus(threadId: string, reconnectKey: number = 0):
     setIsLoading(true);
     setError(null);
 
-    const es = new EventSource(statusStreamUrl(threadId));
+    const es = new EventSource(statusStreamUrl(threadId, waitPastReview));
     eventSourceRef.current = es;
 
     es.onopen = () => {
@@ -47,7 +50,7 @@ export function useGenerationStatus(threadId: string, reconnectKey: number = 0):
         setData(parsed);
         setIsLoading(false);
         setError(null);
-        if (isTerminal(parsed.status)) {
+        if (isTerminal(parsed.status, waitPastReview)) {
           setIsStreaming(false);
           es.close();
         }
@@ -78,12 +81,12 @@ export function useGenerationStatus(threadId: string, reconnectKey: number = 0):
     // `reconnectKey` is a deliberate re-trigger: bump it after a successful resume so a fresh
     // connection opens even though `threadId` hasn't changed and the previous one already
     // closed itself on "awaiting_review".
-  }, [threadId, reconnectKey]);
+  }, [threadId, reconnectKey, waitPastReview]);
 
   return {
     data,
     error,
     isLoading,
-    isStreaming: isStreaming && !isTerminal(data?.status),
+    isStreaming: isStreaming && !isTerminal(data?.status, waitPastReview),
   };
 }

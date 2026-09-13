@@ -1,8 +1,8 @@
 # QuickPaperAI API Contract
 
-Source of truth: `QuickPaperAI/src/{auth,paper,db}/routes/routes.py` and their Pydantic
-schemas/services (`src/auth/user_schemas.py`, `src/auth/token_schemas.py`, `src/paper/schemas.py`,
-`src/paper/models.py`, `src/paper/service.py`, `src/db/schemas.py`, `src/db/services/service.py`).
+Source of truth: `../QuickPaperAI/src/{auth,paper,db}/routes/routes.py` and their Pydantic
+schemas/services (`../QuickPaperAI/src/auth/user_schemas.py`, `../QuickPaperAI/src/auth/token_schemas.py`, `../QuickPaperAI/src/paper/schemas.py`,
+`../QuickPaperAI/src/paper/models.py`, `../QuickPaperAI/src/paper/service.py`, `../QuickPaperAI/src/db/schemas.py`, `../QuickPaperAI/src/db/services/service.py`).
 Re-derive this doc from those files if the backend changes — do not hand-edit around a drift.
 
 Base URL: `VITE_API_BASE_URL` (defaults to `http://localhost:8000` in dev). All paths below are
@@ -107,7 +107,7 @@ type StatusResponse =
   | { status: "generating", progress: Record<string, ChapterProgress> }   // key = chapter name
   | { status: "awaiting_review", targets: { objective: number, subjective: number }, questions: Question[] }
   | { status: "completed", files: { paper_pdf: string, paper_docx: string, answer_pdf: string } } // values are /api/download/... paths
-  | { status: "failed", progress?: Record<string, ChapterProgress> }
+  | { status: "failed", progress?: Record<string, ChapterProgress>, errors: { chapter: string, message: string }[] }
 ```
 
 `Question`:
@@ -213,5 +213,35 @@ the actual backend that must **not** be carried into the new client:
 4. `resume()`'s response was typed as `{ ok: true }` — the real response is
    `{ status: "resumed", thread_id: string }`.
 5. `history[].id` was typed `string` — it's actually a `number`.
-6. `FailedStatus` included an optional `error?: string` field the backend never sends — only
-   `progress` is ever included alongside `status: "failed"`.
+6. `FailedStatus` included an optional `error?: string` field the backend never sent — the real
+   shape is `{ status: "failed", progress?: ..., errors: { chapter: string, message: string }[] }`
+   (plural `errors`, always present, defaults to `[]`).
+
+## Error responses
+
+Backend error responses come in two shapes, depending on which code path produced them.
+
+### Shape 1 — classified AppError (preferred)
+
+Endpoints that raise the backend's `AppError` hierarchy return:
+
+```json
+{ "detail": "Human-readable message", "code": "MACHINE_READABLE_CODE" }
+```
+
+Known codes: `NOT_FOUND` (404), `UNAUTHENTICATED` (401), `RATE_LIMITED` (429),
+`PERMISSION_ERROR` (403), `VALIDATION_ERROR` (400), `INTERNAL_SERVER_ERROR` (500),
+`REPOSITORY_ERROR` (500), `SERVICE_UNAVAILABLE` (503).
+
+Unhandled server exceptions also return `{ detail, code: "INTERNAL_SERVER_ERROR" }` with
+status 500 via the `ServerErrorMiddleware` fallback.
+
+### Shape 3 — unconverted raw HTTPException
+
+Several paths still raise `fastapi.HTTPException` directly, which returns `{ detail }` only
+(no `code` field). Confirmed unconverted as of this writing: `register_user`,
+`authenticate_user` DB-error/unverified branches, `get_current_user` credential failure,
+`verify_thread_ownership` access denied.
+
+**Do not assume `code` is present on every error response.** The frontend's `ApiError` class
+stores `code` as `ApiErrorCode | undefined` and any branch on it must handle the undefined case.

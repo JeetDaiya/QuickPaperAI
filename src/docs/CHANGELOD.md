@@ -67,3 +67,8 @@ explaining, that belongs in a commit message, not here. If it's still true today
 - `_generate_batch`'s outer tenacity retry no longer retries `OutputParserException` — the
   11-model fallback chain already covers it; retrying the whole chain again multiplied cost for
   little benefit.
+
+## 2026-09-13
+- Added `PaperDifficulty` to the checkpoint `JsonPlusSerializer` allow-list in both
+  `src/dependencies.py` and `src/paper/worker/settings.py`, silencing the "Blocked
+  deserialization" warning.

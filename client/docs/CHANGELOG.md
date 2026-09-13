@@ -51,3 +51,13 @@ those belong in a commit message or PR description. Never edit or remove old ent
 
 - **2026-09-12** — Added `vercel.json` with a catch-all SPA rewrite to fix a 404 on Vercel when
   refreshing or deep-linking into any client-side route (e.g. mid-generation/review pages).
+
+- **2026-09-12** — Upgraded error handling to consume the backend's new structured error
+  contract (`{detail, code}`): introduced `ApiError` class in `http.ts`, `isApiError()` type
+  guard, `ApiErrorCode` union type; replaced string-based lockout detection in verify-otp with
+  `code === "RATE_LIMITED"`; updated `FailedStatus` to include `errors: {chapter, message}[]`
+  with per-chapter error rendering on the generation failed screen.
+
+- **2026-09-13** — Fixed the post-Finalize "Compiling Your Paper…" screen hanging until refresh:
+  `useGenerationStatus` closed the reconnected stream on the stale `"awaiting_review"` first
+  message despite `waitPastReview`; `isTerminal()` now honors that flag.

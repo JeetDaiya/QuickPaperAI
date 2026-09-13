@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { VerifyOtpPage } from "@/pages/VerifyOtpPage";
 import { useSendOtp, useVerifyOtp } from "@/hooks/useAuth";
-import { setToken } from "@/lib/api/http";
+import { setToken, isApiError } from "@/lib/api/http";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 type Search = { email: string; purpose: "signup" | "reset_password" };
@@ -43,7 +43,7 @@ function VerifyOtpRoute() {
           }
         },
         onError: (e) => {
-          if (e.message.toLowerCase().includes("locked")) setLockedOut(true);
+          if (isApiError(e) && e.code === "RATE_LIMITED") setLockedOut(true);
         },
       },
     );

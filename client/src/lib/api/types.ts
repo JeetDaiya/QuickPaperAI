@@ -22,6 +22,19 @@ export type ChapterStatus = "pending" | "processing" | "completed" | "failed";
 
 export type OtpPurpose = "signup" | "reset_password";
 
+/** Machine-readable error codes from the backend's AppError hierarchy.
+ * Not every error response includes a code (unconverted endpoints return
+ * {detail} only) — always treat code as optional at the parse site. */
+export type ApiErrorCode =
+  | "NOT_FOUND"
+  | "UNAUTHENTICATED"
+  | "RATE_LIMITED"
+  | "PERMISSION_ERROR"
+  | "VALIDATION_ERROR"
+  | "INTERNAL_SERVER_ERROR"
+  | "REPOSITORY_ERROR"
+  | "SERVICE_UNAVAILABLE";
+
 // ---- Auth ----
 
 export interface UserResponse {
@@ -132,9 +145,15 @@ export interface CompletedStatus {
   };
 }
 
+export interface ChapterError {
+  chapter: string;
+  message: string;
+}
+
 export interface FailedStatus {
   status: "failed";
   progress?: Record<string, ChapterProgress>;
+  errors: ChapterError[];
 }
 
 export type StatusResponse =

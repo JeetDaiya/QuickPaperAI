@@ -64,7 +64,7 @@ function GenerationRoute() {
   // of leaving the dead connection to be rediscovered only on a manual page refresh.
   const [reconnectKey, setReconnectKey] = useState(0);
   const hasResumed = reconnectKey > 0;
-  const { data: status, error, isLoading } = useGenerationStatus(threadId, reconnectKey);
+  const { data: status, error, isLoading } = useGenerationStatus(threadId, reconnectKey, hasResumed);
   const cancelMutation = useCancelGeneration();
   const resumeMutation = useResumeGeneration();
   const saveMutation = useSaveToCloud();
@@ -141,7 +141,80 @@ function GenerationRoute() {
     );
   }
 
-  // "uninitialized" | "generating" | "failed"
+  if (status.status === "failed") {
+    const progress = status.progress ?? {};
+    const chapters = Object.values(progress);
+    return (
+      <main className="w-full max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop py-12 flex flex-col items-center">
+        <div className="text-center mb-12 max-w-2xl w-full">
+          <span className="material-symbols-outlined text-error text-5xl mb-4 material-symbols-fill">error</span>
+          <h1 className="font-display-lg text-display-lg text-on-surface mb-2">Generation Failed</h1>
+          <p className="font-body-lg text-body-lg text-on-surface-variant">
+            Some chapters could not be generated. You can try again or go back to the dashboard.
+          </p>
+        </div>
+
+        {status.errors.length > 0 && (
+          <div className="w-full max-w-3xl bg-surface border border-error/30 p-6 rounded stamp-shadow mb-8">
+            <h2 className="font-headline-md text-headline-md text-on-surface mb-4 flex items-center gap-2">
+              <span className="material-symbols-outlined text-error text-[22px]">warning</span>
+              Error Details
+            </h2>
+            <ul className="space-y-3">
+              {status.errors.map((err, i) => (
+                <li key={i} className="flex items-start gap-3 p-3 rounded bg-error-container/30 border border-error/20">
+                  <span className="font-label-md text-label-md font-semibold text-on-surface shrink-0 mt-0.5">{err.chapter}</span>
+                  <span className="font-body-md text-body-md text-on-surface-variant">{err.message}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {chapters.length > 0 && (
+          <div className="w-full max-w-3xl bg-surface border border-outline-variant p-6 rounded stamp-shadow mb-8">
+            <h2 className="font-headline-md text-headline-md text-on-surface mb-4">Chapter Status</h2>
+            <div className="space-y-2">
+              {chapters.map((c) => (
+                <div key={c.chapter} className="flex items-center justify-between py-2 border-b border-outline-variant last:border-b-0">
+                  <span className="font-label-md text-label-md text-on-surface">{c.chapter}</span>
+                  <span className={`font-label-sm text-label-sm px-2 py-0.5 rounded-full ${
+                    c.status === "failed"
+                      ? "bg-error-container text-on-error-container"
+                      : c.status === "completed"
+                        ? "bg-surface-container-lowest border border-outline text-on-surface"
+                        : "bg-surface-container-lowest border border-outline-variant text-on-surface-variant"
+                  }`}>
+                    {c.status} — {c.generated_count} questions
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-4">
+          <button
+            onClick={() => navigate({ to: "/dashboard" })}
+            className="px-6 py-3 border border-outline-variant text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors duration-200 flex items-center gap-2 rounded-sm bg-surface stamp-shadow"
+          >
+            <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+            Back to Dashboard
+          </button>
+          <button
+            onClick={handleCancel}
+            disabled={cancelMutation.isPending}
+            className="px-6 py-3 border border-outline-variant text-on-surface-variant hover:text-error hover:border-error hover:bg-error-container font-label-md text-label-md transition-colors duration-200 flex items-center gap-2 rounded-sm bg-surface stamp-shadow disabled:opacity-60"
+          >
+            <span className="material-symbols-outlined text-[18px]">cancel</span>
+            {cancelMutation.isPending ? "Cancelling…" : "Dismiss"}
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  // "uninitialized" | "generating"
   return (
     <ProgressPage
       paperTitle="New Exam Paper"
