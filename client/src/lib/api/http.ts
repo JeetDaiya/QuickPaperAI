@@ -1,6 +1,8 @@
 // The only module that knows about HTTP. Ported from the old client's jsonFetch
 // (QuickPaperAI/client/src/lib/api.ts), ported logic only — none of its UI.
 
+import type { ApiErrorCode } from "./types";
+
 // Config comes from `.env` only (see `.env.example`). A production build with no
 // VITE_API_BASE_URL fails at startup rather than silently shipping a bundle pointed at
 // localhost; dev keeps the localhost default so `npm run dev` works out of the box.
@@ -41,18 +43,39 @@ function handle401() {
   }
 }
 
-async function extractErrorDetail(res: Response): Promise<string> {
+/** Error subclass that preserves the backend's machine-readable `code` (when present)
+ * and HTTP status alongside the human-readable message. Fully backward-compatible:
+ * extends Error, so every existing `e.message` / `.error?.message` site keeps working.
+ * Use `isApiError(e)` to narrow when you need to branch on `code`. */
+export class ApiError extends Error {
+  readonly code: ApiErrorCode | undefined;
+  readonly status: number;
+  constructor(message: string, code: ApiErrorCode | undefined, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+export function isApiError(e: unknown): e is ApiError {
+  return e instanceof ApiError;
+}
+
+async function extractErrorBody(res: Response): Promise<{ detail: string; code?: ApiErrorCode }> {
   const body = await res.text().catch(() => "");
   try {
     const parsed = JSON.parse(body);
-    if (typeof parsed.detail === "string") return parsed.detail;
+    const code = typeof parsed.code === "string" ? (parsed.code as ApiErrorCode) : undefined;
+    if (typeof parsed.detail === "string") return { detail: parsed.detail, code };
     if (Array.isArray(parsed.detail) && parsed.detail.length > 0) {
-      return parsed.detail.map((d: { msg?: string }) => d.msg ?? JSON.stringify(d)).join(", ");
+      return { detail: parsed.detail.map((d: { msg?: string }) => d.msg ?? JSON.stringify(d)).join(", "), code };
     }
-    if (parsed.message) return parsed.message;
-    return typeof parsed === "string" ? parsed : body;
+    if (parsed.message) return { detail: parsed.message, code };
+    const fallback = typeof parsed === "string" ? parsed : body;
+    return { detail: fallback, code };
   } catch {
-    return body;
+    return { detail: body };
   }
 }
 
@@ -69,12 +92,12 @@ export async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T>
 
   if (res.status === 401) {
     handle401();
-    throw new Error("Session expired. Please log in again.");
+    throw new ApiError("Session expired. Please log in again.", "UNAUTHENTICATED", 401);
   }
 
   if (!res.ok) {
-    const detail = await extractErrorDetail(res);
-    throw new Error(detail || `${res.status} ${res.statusText}`);
+    const { detail, code } = await extractErrorBody(res);
+    throw new ApiError(detail || `${res.status} ${res.statusText}`, code, res.status);
   }
 
   return res.json() as Promise<T>;
@@ -93,8 +116,8 @@ export async function formFetch<T>(path: string, params: Record<string, string>)
   });
 
   if (!res.ok) {
-    const detail = await extractErrorDetail(res);
-    throw new Error(detail || `${res.status} ${res.statusText}`);
+    const { detail, code } = await extractErrorBody(res);
+    throw new ApiError(detail || `${res.status} ${res.statusText}`, code, res.status);
   }
 
   return res.json() as Promise<T>;

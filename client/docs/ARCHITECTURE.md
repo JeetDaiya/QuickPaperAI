@@ -29,7 +29,9 @@ route file owns the data-fetching hook and passes plain props/callbacks down.
 ### `src/lib/api/` — the typed client
 - `types.ts` — request/response types matching `docs/api-contract.md` exactly.
 - `http.ts` — the only `fetch()` wrapper (`jsonFetch`, `formFetch`), token storage
-  (`getToken`/`setToken`/`clearToken`), 401 → auto-redirect-to-login, and `resolveFileUrl()` /
+  (`getToken`/`setToken`/`clearToken`), 401 → auto-redirect-to-login, `ApiError` class
+  (preserves the backend's machine-readable `code` alongside the human-readable message —
+  see GOTCHAS for the dual error shapes), `isApiError()` type guard, and `resolveFileUrl()` /
   `withToken()` for turning a backend-relative path into an authenticated URL (used for
   downloads and the SSE stream, which can't send an `Authorization` header — see GOTCHAS).
 - `auth.ts`, `paper.ts`, `db.ts` — one function per endpoint, named after the route.

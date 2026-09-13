@@ -11,11 +11,12 @@ from datetime import datetime, timedelta, timezone
 
 from supabase import SupabaseException
 
-from src.auth.interface.interface import AuthService
+from src.exception.exceptions import AuthError, RepositoryError, NotFoundError
+from src.auth.interface.interface import AuthInterface
 from src.db.interfaces.interface import UserRepository
 
 
-class CustomAuthService(AuthService):
+class CustomAuthAdapter(AuthInterface):
     def __init__(self, user_repo : UserRepository, secret_key : str, algorithm: str, token_expire_minutes: int):
         self.user_repo = user_repo
         self.secret_key = secret_key
@@ -42,7 +43,7 @@ class CustomAuthService(AuthService):
             return True, False
         try:
             legacy_ok = await asyncio.to_thread(self.pwd_context.verify, plain_password, hashed_password)
-        except Exception:
+        except Exception as e:
             legacy_ok = False
         return (True, True) if legacy_ok else (False, False)
 
@@ -93,7 +94,7 @@ class CustomAuthService(AuthService):
             raise HTTPException(status_code=500, detail="Database authentication error")
 
         if user is None:
-            raise HTTPException(status_code=401, detail="Incorrect email or password")
+            raise AuthError(message="Incorrect email or password", email=email)
 
         if not user.get("is_active", False):
             raise HTTPException(
@@ -103,7 +104,7 @@ class CustomAuthService(AuthService):
 
         is_valid, used_legacy = await self._verify_password(password, user['hashed_password'])
         if not is_valid:
-            raise HTTPException(status_code=401, detail="Incorrect email or password")
+            raise AuthError(message="Incorrect email or password", email=email)
 
         # Transparently migrate legacy (raw-password) hashes to the new pre-hash scheme on login.
         if used_legacy:
@@ -123,33 +124,30 @@ class CustomAuthService(AuthService):
     async def verify_session(self, token: str, expected_type: str = "access") -> dict:
         try:
             payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
-            email = payload.get("sub")
-
-            if not email:
-                raise HTTPException(status_code=401, detail="Invalid token")
-
-            if payload.get("type") != expected_type:
-                raise HTTPException(status_code=401, detail="Invalid token type")
-
-            user = await asyncio.to_thread(self.user_repo.get_user, email=email)
-
         except JWTError:
-            raise HTTPException(status_code=401, detail="Session expired or invalid Token")
-        except SupabaseException as e:
+            raise AuthError(message="Invalid or expired token")
+
+        email = payload.get("sub")
+        if not email or payload.get("type") != expected_type:
+            raise AuthError(message="Invalid Token", token=payload, expected_type=expected_type)
+
+        try:
+            user = await asyncio.to_thread(self.user_repo.get_user, email=str(email))
+        except Exception as e:
             print(f"[ERROR] DB Error fetching session user: {e}")
-            raise HTTPException(status_code=500, detail="Database session validation error")
+            raise RepositoryError(email=email) from e
 
         if not user:
-            raise HTTPException(status_code=401, detail="User session not found")
+            raise NotFoundError(message="User session not found", email=email)
 
         return user
 
     async def activate_user(self, email: str) -> None:
         try:
             await asyncio.to_thread(self.user_repo.activate_user, email=email)
-        except SupabaseException as e:
+        except Exception as e:
             print(f"DB Error activating user {email}: {e}")
-            raise HTTPException(status_code=500, detail="Failed to activate user account")
+            raise RepositoryError(email=email) from e
 
     def create_token_for_email(self, email: str, token_type: str = "access", expires_minutes: Optional[int] = None) -> dict:
         access_token = self._create_access_token(data={"sub": email}, token_type=token_type, expires_minutes=expires_minutes)
@@ -162,18 +160,16 @@ class CustomAuthService(AuthService):
         try:
             user = await asyncio.to_thread(self.user_repo.get_user, email=email)
             return user
-        except SupabaseException as e:
-            raise HTTPException(status_code=500, detail="Database error during retrieval")
         except Exception as e:
-            raise HTTPException(status_code=500, detail="Internal Server Error")
+            raise RepositoryError(email=email) from e
 
     async def update_password(self, email: str, new_password: str) -> None:
         try:
             hashed_password = await self._get_hashed_password(new_password)
             await asyncio.to_thread(self.user_repo.update_user_password, email=email, new_hashed_password=hashed_password)
-        except SupabaseException as e:
+        except Exception as e:
             print(f"DB Error resetting password for {email}: {e}")
-            raise HTTPException(status_code=500, detail="Failed to reset password")
+            raise RepositoryError(email=email) from e
 
 
 

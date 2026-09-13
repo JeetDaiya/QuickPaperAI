@@ -10,8 +10,13 @@ If you hit something new and non-obvious, add a line here — don't bury it in a
   *pause*, not the end: after the user resumes, the backend keeps working and will eventually
   push `"completed"` — but only to a connection that still exists. `generate.$threadId.tsx`
   bumps a `reconnectKey` right when the resume call succeeds, forcing `useGenerationStatus` to
-  open a fresh connection. **Don't remove this** — without it, the UI silently gets stuck on
-  the Review/"Compiling…" screen forever after Finalize, recoverable only by a manual refresh.
+  open a fresh connection **with `wait_past_review=true`** so the backend doesn't treat a stale
+  `"awaiting_review"` checkpoint as terminal and close immediately. **Don't remove either
+  mechanism** — without the reconnect the UI never gets a fresh connection; without
+  `wait_past_review` the fresh connection closes before the real transition arrives. The hook's
+  own `isTerminal()` must honor the same flag: if it closes the `EventSource` on the stale
+  `"awaiting_review"` the backend sends first on that reconnect, the client kills the stream
+  itself (no server error, no auto-retry) and the Compiling screen hangs until a refresh.
 - The backend has no distinct "compiling" status — after Finalize it goes back to reporting
   `"generating"` with every chapter already `"completed"` (compiling only starts once all
   chapters are done, and the *first* time all chapters finish the backend jumps straight to
@@ -97,6 +102,17 @@ If you hit something new and non-obvious, add a line here — don't bury it in a
   `allowed_types`/counts and must never be sent in the request body. See `docs/api-contract.md`
   for the full list of corrections made against the old `QuickPaperAI/client` app's (wrong)
   assumptions about the contract.
+
+## Backend error response shapes (`ApiError` in `lib/api/http.ts`)
+- The backend returns **two error shapes**: most endpoints return `{ detail, code }` (the
+  `AppError` hierarchy), but some unconverted paths (`register_user`, `authenticate_user`
+  DB-error/unverified branches, `get_current_user`, `verify_thread_ownership`) still return
+  `{ detail }` only — no `code` field.
+- `jsonFetch`/`formFetch` always throw `ApiError` (extends `Error`). Its `.code` property is
+  `ApiErrorCode | undefined` — `undefined` for the unconverted endpoints. Branch on `code`
+  using `isApiError(e)` to narrow, but always have a fallback path for `code === undefined`.
+- Don't introduce new string-matching on `e.message` to distinguish error kinds — use `e.code`
+  for converted endpoints, fall back to displaying `e.message` verbatim for the rest.
 
 ## Testing SSE/network behavior locally
 - Puppeteer's `setRequestInterception` will break CORS preflight (`OPTIONS`) requests if you

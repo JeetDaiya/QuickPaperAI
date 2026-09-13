@@ -110,10 +110,20 @@ class ProgressTracker:
 
     async def mark_cancelled(self, thread_id: str):
         key = f"cancel:{thread_id}"
-        await self.redis_client.set(key, "true", ex=3600)
+        try:
+            await self.redis_client.set(key, "true", ex=3600)
+        except Exception as e:
+            print(f"Marking cancellation failed for {thread_id}, {e}")
 
     async def is_cancelled(self, thread_id: str) -> bool:
+        # Fail open (assume not cancelled) on a Redis blip — this is called every batch
+        # iteration inside question_generator_node's hot loop, and letting it raise triggers
+        # the node's RetryPolicy, which restarts the whole chapter's batch loop from scratch.
         key = self._get_cancel_key(thread_id=thread_id)
-        val = await self.redis_client.get(key)
-        return val is not None
+        try:
+            val = await self.redis_client.get(key)
+            return val is not None
+        except Exception as e:
+            print(f"Checking cancellation failed for {thread_id}, {e}")
+            return False
 

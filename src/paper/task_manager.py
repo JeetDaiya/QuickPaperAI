@@ -2,6 +2,8 @@ from typing import Optional
 from arq import ArqRedis
 from arq.jobs import Job, JobStatus
 
+from src.exception.exceptions import InternalServerError_
+
 
 class TaskManager:
     """
@@ -17,15 +19,21 @@ class TaskManager:
         payload: dict,
         user_fcm_token: Optional[str] = None
     ) -> None:
-        await self.redis_pool.enqueue_job(
-            "generate_paper_task",
-            thread_id,
-            payload,
-            user_fcm_token,
-            _job_id=thread_id
-        )
-        print(f"[INFO] Task for thread {thread_id} enqueued into ARQ Redis pool.")
+        try:
+            await self.redis_pool.enqueue_job(
+                "generate_paper_task",
+                thread_id,
+                payload,
+                user_fcm_token,
+                _job_id=thread_id
+            )
+            print(f"[INFO] Task for thread {thread_id} enqueued into ARQ Redis pool.")
+        except Exception as e:
+            raise InternalServerError_(thread_id=thread_id) from e
 
+    # cancel_task / is_running are deliberately best-effort: they return an advisory bool
+    # rather than raising, since callers (cancel_generation's cleanup chain, status checks)
+    # already treat "unknown" the same as "false" — log-and-continue, not a leftover.
     async def cancel_task(self, thread_id: str) -> bool:
         try:
             job = Job(job_id=thread_id, redis=self.redis_pool)
@@ -46,11 +54,13 @@ class TaskManager:
             return False
 
     async def register_resume_task(self, thread_id: str, selected_indices: list[int]) -> None:
-        await self.redis_pool.enqueue_job(
-            "resume_paper_task",
-            thread_id,
-            selected_indices,
-            _job_id=f"{thread_id}-resume"
-        )
-        print(f"[INFO] Resume task for thread {thread_id} enqueued into ARQ Redis pool.")
-
+        try:
+            await self.redis_pool.enqueue_job(
+                "resume_paper_task",
+                thread_id,
+                selected_indices,
+                _job_id=f"{thread_id}-resume"
+            )
+            print(f"[INFO] Resume task for thread {thread_id} enqueued into ARQ Redis pool.")
+        except Exception as e:
+            raise InternalServerError_(thread_id=thread_id) from e

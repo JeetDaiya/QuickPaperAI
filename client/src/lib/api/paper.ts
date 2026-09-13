@@ -22,8 +22,10 @@ export function resumeGeneration(threadId: string, selectedIndices: number[]) {
 }
 
 /** SSE endpoint — there is no plain JSON GET /api/status/{threadId}, only /stream. */
-export function statusStreamUrl(threadId: string): string {
-  return withToken(apiUrl(`/api/status/${encodeURIComponent(threadId)}/stream`));
+export function statusStreamUrl(threadId: string, waitPastReview = false): string {
+  const base = apiUrl(`/api/status/${encodeURIComponent(threadId)}/stream`);
+  const withParam = waitPastReview ? `${base}?wait_past_review=true` : base;
+  return withToken(withParam);
 }
 
 /** Direct file link (download/preview) — token must ride in the query string, not a header. */
