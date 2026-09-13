@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
 from src.paper.schemas import PaperGenerateRequest
-from src.auth.dependencies import get_current_user, verify_thread_ownership, extract_user_id
+from src.auth.dependencies import get_current_user, verify_thread_ownership, extract_user_id, enforce_generation_quota
 from src.paper.dependencies import get_paper_service, get_pubsub_redis
 from src.paper.service import PaperService
 
@@ -24,6 +24,7 @@ async def generate_paper(
     req: Request,
     paper_request: PaperGenerateRequest,
     current_user: dict = Depends(get_current_user),
+    _: None = Depends(enforce_generation_quota),
     paper_service: PaperService = Depends(get_paper_service)
 ):
     agent = req.app.state.agent

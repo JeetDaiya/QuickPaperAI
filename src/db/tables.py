@@ -34,6 +34,7 @@ class User:
     NOTIFICATIONS_ENABLED = "notifications_enabled"
     FCM_TOKEN = "fcm_token"
     IS_ACTIVE = "is_active"
+    IS_SUPERUSER = "is_superuser"
     HASHED_PASSWORD = "hashed_password"
     EMAIL = "email"
     USER_ID = "id"

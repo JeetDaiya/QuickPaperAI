@@ -113,6 +113,20 @@ If you hit something new and non-obvious, add a line here — don't bury it in a
   `allowed_types`/counts and must never be sent in the request body. See `docs/api-contract.md`
   for the full list of corrections made against the old `QuickPaperAI/client` app's (wrong)
   assumptions about the contract.
+- Free-tier quota (`POST /api/generate`, non-superuser accounts) is enforced entirely
+  server-side in `enforce_generation_quota` (`../QuickPaperAI/src/auth/dependencies.py`) — see
+  `docs/FREE_TIER_QUOTA_HANDOFF.md`. `SetupPage`'s `firstNChapterNames` (`lib/utils.ts`) mirrors
+  only the "first 2 chapters of a subject" half of that rule, purely cosmetically (greys out
+  chapters beyond the cap) — it must stay in exact algorithmic lockstep with the backend's
+  `first_n_chapter_names` (`../QuickPaperAI/src/paper/quota.py`: dedupe, sort by numeric value,
+  slice first 2) or a chapter shown as "allowed" client-side can still 403. The other two rules
+  — locked to one subject, lifetime cap of 2 chapters total — are **not** mirrored client-side
+  at all: there's no backend endpoint that accurately reports "chapters used so far"
+  (`GET /api/db/history` only returns `status="saved"` papers, so it undercounts a failed or
+  unsaved generation that still consumed quota server-side) — don't try to reconstruct that
+  count from existing endpoints. The reactive path in `generate.setup.tsx` (keying off
+  `error.code === "PERMISSION_ERROR"`, never string-matching `.message`) is the only source of
+  truth for those two cases and must stay wired up even if the proactive chapter-cap UI changes.
 
 ## Backend error response shapes (`ApiError` in `lib/api/http.ts`)
 - The backend returns **two error shapes**: most endpoints return `{ detail, code }` (the

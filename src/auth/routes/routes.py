@@ -5,7 +5,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from src.auth.services.service import AuthService
 from src.mail.interfaces.interface import EmailService
 from src.auth.dependencies import get_current_user, \
-    get_auth_service
+    get_auth_service, ip_rate_limit
 from src.auth.user_schemas import (
     UserRegister, UserResponse, EmailRequest, OTPVerification, 
      ResetPasswordRequest, FCMTokenRequest, NotificationToggleRequest
@@ -25,7 +25,11 @@ async def send_email(email: str, otp_code: str, email_service: EmailService):
     await email_service.send_email(subject="Your Account Verification OTP", recipient=email, body=html_content)
 
 
-@auth_routes.post('/register', response_model=UserResponse)
+@auth_routes.post(
+    '/register',
+    response_model=UserResponse,
+    dependencies=[Depends(ip_rate_limit("register", limit=5, window_seconds=3600))],
+)
 async def register_user(user: UserRegister, auth_service: AuthService = Depends(get_auth_service)):
     return await auth_service.register_user(user=user)
 
@@ -37,7 +41,10 @@ async def login_user(form_data: OAuth2PasswordRequestForm = Depends(), auth_serv
     return await auth_service.login_user(email=email, password=password)
 
 
-@auth_routes.post("/send-email")
+@auth_routes.post(
+    "/send-email",
+    dependencies=[Depends(ip_rate_limit("send-email", limit=10, window_seconds=3600))],
+)
 async def send_verification_email(
     email_req: EmailRequest,
     auth_service: AuthService = Depends(get_auth_service)

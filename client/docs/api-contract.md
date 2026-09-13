@@ -13,7 +13,7 @@ relative to that base.
 ### `POST /auth/register`
 - Auth: none
 - Request: `{ email: string, password: string (8-128 chars), name: string }`
-- Response `200`: `{ id: string (uuid), email: string, name: string, is_active: boolean, created_at: string (ISO datetime) }`
+- Response `200`: `{ id: string (uuid), email: string, name: string, is_active: boolean, is_superuser: boolean, created_at: string (ISO datetime) }`
 
 ### `POST /auth/login`
 - Auth: none
@@ -42,7 +42,7 @@ relative to that base.
 
 ### `GET /auth/me`
 - Auth: Bearer
-- Response `200`: `{ id: string (uuid), email: string, name: string, is_active: boolean, created_at: string (ISO datetime) }`
+- Response `200`: `{ id: string (uuid), email: string, name: string, is_active: boolean, is_superuser: boolean, created_at: string (ISO datetime) }`
 
 ### `POST /auth/device-token`
 - Auth: Bearer
@@ -70,14 +70,20 @@ relative to that base.
     standard: string
     difficulty: "Easy" | "Balanced" | "Hard"
     chapters: string[]
-    objective_count: number             // default 0
-    subjective_count: number            // default 0
+    objective_count: number             // default 0, 0-10 inclusive — enforced for every account, no superuser exemption
+    subjective_count: number            // default 0, 0-10 inclusive — same
     allowed_types: QuestionType[]       // default: all 8 types, see below
     difficulty_distribution: { easy: number, medium: number, hard: number } | null  // must sum to 100 if provided
   }
   ```
   Do **not** include any field beyond these (e.g. no `paper_type_mode` — that concept doesn't exist
   on the backend; see Notes).
+  **`objective_count`/`subjective_count` are per topic within a chapter, not a total for the
+  paper** — the backend fans generation out per chapter, and applies this same count to every
+  sub-topic batch inside each chapter (`src/paper/graph/nodes.py::question_generator_node`), so
+  the real number of questions in the finished paper scales with however many chapters/topics are
+  selected. A value over 10 is rejected with a 422 (plain FastAPI validation-error shape, not the
+  `{detail, code}` `AppError` envelope — see Error responses below).
 - Response `200`: `{ thread_id: string, status: "generating" }`
 
 ### `POST /api/resume/{thread_id}`

@@ -122,6 +122,9 @@ class PaperService:
             raise e
 
     async def download_file(self, thread_id: str, filename: str, preview: bool = False):
+        if filename not in GENERATED_DOCUMENT_TYPES:
+            raise NotFoundError(filename=filename)
+
         output_dir = f"outputs/{thread_id}"
         local_path = f"{output_dir}/{filename}"
 

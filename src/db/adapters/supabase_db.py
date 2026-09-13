@@ -29,6 +29,19 @@ class SupabaseChunkRepository(ChunkRepository):
         except Exception as e:
             raise RepositoryError(subject=subject, chapter=chapter) from e
 
+    @override
+    def get_subject_chapters(self, subject: str) -> list[str]:
+        try:
+            response = (
+                self.db.table(Chunks.TABLE)
+                .select(Chunks.CHAPTER_NAME)
+                .eq(Chunks.SUBJECT, subject)
+                .execute()
+            )
+            return list({row[Chunks.CHAPTER_NAME] for row in response.data})
+        except Exception as e:
+            raise RepositoryError(subject=subject) from e
+
 
 class SupabaseUserRepository(UserRepository):
     def __init__(self, client: Client) -> None:
@@ -131,6 +144,18 @@ class SupabasePaperRepository(PaperRepository):
             return data.data
         except Exception as e:
             raise RepositoryError() from e
+
+    def get_user_generation_records(self, user_id: str) -> list[dict]:
+        try:
+            response = (
+                self.db.table(GeneratedPapers.TABLE)
+                .select(f"{GeneratedPapers.SUBJECT},{GeneratedPapers.CHAPTERS}")
+                .eq(GeneratedPapers.USER_ID, user_id)
+                .execute()
+            )
+            return response.data
+        except Exception as e:
+            raise RepositoryError(user_id=user_id) from e
 
     def upload_paper_metadata(self, metadata: dict):
         try:

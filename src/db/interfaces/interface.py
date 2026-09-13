@@ -9,6 +9,10 @@ class ChunkRepository(ABC):
     def get_chapter_chunks(self, subject: str, chapter: str) -> list[dict]:
         pass
 
+    @abstractmethod
+    def get_subject_chapters(self, subject: str) -> list[str]:
+        pass
+
 
 class UserRepository(ABC):
     @abstractmethod
@@ -63,6 +67,10 @@ class PaperRepository(ABC):
 
     @abstractmethod
     def get_chapters(self):
+        pass
+
+    @abstractmethod
+    def get_user_generation_records(self, user_id: str) -> list[dict]:
         pass
 
     @abstractmethod
