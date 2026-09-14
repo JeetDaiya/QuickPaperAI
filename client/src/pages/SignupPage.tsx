@@ -15,7 +15,7 @@ export function SignupPage({ onSubmit, isSubmitting, error }: SignupPageProps) {
   const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <AuthShell badge="Academic System Clearance: Tier-1 Registration">
+    <AuthShell>
       <div className="w-full max-w-[580px] flex flex-col items-center">
       <div className="w-full bg-surface-container-lowest border border-outline-variant p-8 md:p-10 rounded-lg stamp-shadow relative">
         <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-surface-container text-on-surface-variant font-label-sm text-label-sm mb-6 border border-outline-variant/40">
