@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 interface AuthShellProps {
-  badge: string;
+  badge?: string;
   children: ReactNode;
 }
 
@@ -25,12 +25,14 @@ export function AuthShell({ badge, children }: AuthShellProps) {
               </span>
             </div>
           </div>
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded bg-surface-container-low border border-outline-variant text-on-surface-variant">
-            <span className="w-2 h-2 rounded-full bg-secondary animate-pulse" />
-            <span className="font-label-sm text-label-sm tracking-wider uppercase font-semibold text-secondary">
-              {badge}
-            </span>
-          </div>
+          {badge && (
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded bg-surface-container-low border border-outline-variant text-on-surface-variant">
+              <span className="w-2 h-2 rounded-full bg-secondary animate-pulse" />
+              <span className="font-label-sm text-label-sm tracking-wider uppercase font-semibold text-secondary">
+                {badge}
+              </span>
+            </div>
+          )}
         </div>
       </header>
 

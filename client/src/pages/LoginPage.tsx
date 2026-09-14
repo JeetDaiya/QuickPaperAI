@@ -14,7 +14,7 @@ export function LoginPage({ onSubmit, isSubmitting, error }: LoginPageProps) {
   const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <AuthShell badge="Academic System Clearance: Tier-1">
+    <AuthShell>
       <div className="w-full max-w-[520px] bg-surface-container-lowest border border-outline-variant rounded stamp-shadow p-8 md:p-10 relative">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center gap-2 mb-3">
