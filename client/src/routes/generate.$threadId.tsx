@@ -43,10 +43,8 @@ function documentTitleFor(status: StatusResponse | undefined, hasResumed: boolea
   if (status.status === "failed") return "Generation Failed";
   if (status.status === "generating") {
     if (isCompiling(status)) return "Compiling Paper…";
-    const chapters = Object.values(status.progress);
-    const completed = chapters.filter((c) => c.status === "completed").length;
-    const pct = chapters.length ? Math.round((completed / chapters.length) * 100) : 0;
-    return `Generating… (${pct}%)`;
+    const totalGenerated = Object.values(status.progress).reduce((sum, c) => sum + c.generated_count, 0);
+    return `Generating… (${totalGenerated} generated)`;
   }
   return "Starting…";
 }
