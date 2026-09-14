@@ -40,14 +40,7 @@ export function AuthShell({ badge, children }: AuthShellProps) {
 
       <footer className="bg-surface-container-lowest border-t border-dashed border-outline-variant py-8 w-full">
         <div className="w-full flex flex-col items-center justify-center gap-4 px-margin-mobile md:px-margin-desktop text-center">
-          <div className="font-label-md text-label-md font-bold text-on-surface">
-            © 2024 QuickPaperAI Academic Systems
-          </div>
           <div className="flex items-center gap-6">
-            <a className="font-label-sm text-label-sm text-on-surface-variant hover:text-primary hover:underline transition-all" href="#privacy">
-              Privacy Policy
-            </a>
-            <span className="text-outline-variant">•</span>
             <a className="font-label-sm text-label-sm text-on-surface-variant hover:text-primary hover:underline transition-all" href="#terms">
               Terms of Service
             </a>
