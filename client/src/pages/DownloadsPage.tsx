@@ -121,7 +121,6 @@ export function DownloadsPage({ paperPdfUrl, paperDocxUrl, answerPdfUrl, onSaveT
 
       <footer className="bg-surface-container-lowest border-t border-dashed border-outline-variant w-full flex flex-col items-center justify-center gap-4 px-margin-desktop py-8 mt-auto">
         <div className="font-label-md text-label-md font-bold text-on-surface">QuickPaperAI</div>
-        <p className="text-on-surface-variant font-label-sm text-label-sm opacity-70">© 2024 QuickPaperAI Academic Systems</p>
       </footer>
     </div>
   );
