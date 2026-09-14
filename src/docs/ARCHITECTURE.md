@@ -110,7 +110,8 @@ All cross-cutting capabilities are `interfaces/` + swappable `adapters/`:
 | Users/chunks/papers | `UserRepository`, `ChunkRepository`, `PaperRepository` | `Supabase*Repository` (uses service-role key, bypasses RLS — routes must enforce ownership themselves) |
 | File storage | `StorageService` | `LocalStorageService` (temp/cache), `SupabaseStorageService` (permanent) |
 | OTP | `OTPStore` | `MemoryOTPStore` (dev fallback), `RedisOTPStore` (Upstash, prod) |
-| Per-IP rate limiting | `IPRateLimiter` | `RedisIPRateLimiter` (Upstash) — used on `/auth/register` and `/auth/send-email` via the `ip_rate_limit` dependency factory (`src/auth/dependencies.py`) |
+| Per-IP rate limiting | `IPRateLimiter` | `RedisIPRateLimiter` (Upstash) — used via the `ip_rate_limit` dependency factory (`src/auth/dependencies.py`) on `/auth/register`, `/auth/login`, `/auth/verify-otp`, `/auth/send-email`, `/auth/reset-password`, and `GET /api/db/get-chapters` |
+| Per-account failed-attempt lockout | `FailedAttemptLimiter` | `RedisFailedAttemptLimiter` (Upstash) — generic `key`-based attempts+lockout counter, deliberately kept separate from `OTPStore` (not OTP-specific); used for `/auth/login`'s account lockout in `AuthService.login_user` |
 | Email | `EmailService` | `FastMailService` (`fastapi-mail==1.6.4`, pinned) |
 | Paper rendering | `PaperFormatter` | `HTMLPaperFormatter` (KaTeX), `MarkdownPaperFormatter` |
 | PDF/DOCX compilation | `DocumentCompiler` | `CustomDocumentCompiler` (Playwright + Pandoc) |
@@ -125,9 +126,10 @@ Formatters/compiler are injected into graph nodes via `GraphConfig` (`RunnableCo
 ```
 QuickPaperAI/
 ├── src/
-│   ├── auth/        # interface/, adapters/ (JWT+bcrypt, RedisOTPStore), services/ (use-case
-│   │                #   layer), routes/, schemas, dependencies.py (DI providers + get_current_user,
-│   │                #   verify_thread_ownership)
+│   ├── auth/        # interface/, adapters/ (JWT+bcrypt, RedisOTPStore, RedisIPRateLimiter,
+│   │                #   RedisFailedAttemptLimiter), services/ (use-case layer), routes/, schemas,
+│   │                #   dependencies.py (DI providers + get_current_user, verify_thread_ownership,
+│   │                #   ip_rate_limit)
 │   ├── paper/        # models, schemas, service, task_manager, rate_limiter, routes/,
 │   │                #   graph/ (builder, nodes, state, tracker, utils), formatters/, compilers/,
 │   │                #   dependencies.py (formatters/compiler/progress-tracker/ARQ/paper-service DI)

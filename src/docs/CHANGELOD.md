@@ -88,3 +88,16 @@ explaining, that belongs in a commit message, not here. If it's still true today
   product decision, not tier-gated); added a root-level `errorComponent` on the frontend router so
   an uncaught error shows a reload prompt instead of a blank screen (verified live in a browser
   via a temporary forced error).
+
+## 2026-09-14
+- Extended per-IP rate limiting (`ip_rate_limit`) to `/auth/login`, `/auth/verify-otp`,
+  `/auth/reset-password`, and the previously-unprotected `GET /api/db/get-chapters`.
+- Added a new `FailedAttemptLimiter`/`RedisFailedAttemptLimiter` interface (generic key-based
+  attempts+lockout counter, separate from `OTPStore`) and wired it into `AuthService.login_user`
+  for a per-account lockout (5 failures/15min) on top of the per-IP throttle; login email is now
+  normalized (`.lower().strip()`) like every other auth route, closing a lockout-key-splitting gap
+  found during adversarial testing.
+- Adversarial live testing confirmed: X-Forwarded-For spoofing defeats every `ip_rate_limit` route
+  when the app is reached directly (not exploitable in the current Caddy-fronted deploy, but an
+  app-level trust assumption worth remembering — see `GOTCHAS.md`); fixed-window boundary bursting
+  is real (~2x limit); `get-chapters` is now fail-closed on Redis outages.

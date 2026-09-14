@@ -125,11 +125,41 @@ If you hit something new and non-obvious, add a line here — don't bury it in a
   `filename=../../../../etc/passwd` and read arbitrary server files, since the local-cache-hit
   branch used to build the path before any whitelist check ran. If this endpoint is ever
   refactored, keep the filename check as the very first line.
-- `POST /auth/register` and `POST /auth/send-email` are throttled per client IP
-  (`ip_rate_limit` in `src/auth/dependencies.py`, Redis-backed via `RedisIPRateLimiter`) on top of
-  the existing per-email OTP cooldown — without it, the free-tier chapter quota (keyed on
-  `user_id`) was trivially resettable by registering a new account. `get_client_ip` reads the
-  **last** entry of `X-Forwarded-For`, not the first — Caddy appends the real client IP rather
-  than replacing the header, so the first entry is attacker-supplied and trivially spoofable
-  (send a random fake leading value to get a fresh bucket every request). If a second proxy is
-  ever added in front of Caddy, this needs a trusted-hop-count, not a hardcoded `[-1]`.
+- `POST /auth/register`, `/auth/login`, `/auth/verify-otp`, `/auth/send-email`,
+  `/auth/reset-password`, and `GET /api/db/get-chapters` are all throttled per client IP
+  (`ip_rate_limit` in `src/auth/dependencies.py`, Redis-backed via `RedisIPRateLimiter`) —
+  `/auth/register`'s throttle exists because, without it, the free-tier chapter quota (keyed on
+  `user_id`) was trivially resettable by registering a new account; `get-chapters` is the only
+  fully unauthenticated route in the API and had no protection at all before. `get_client_ip`
+  reads the **last** entry of `X-Forwarded-For`, not the first — Caddy appends the real client IP
+  rather than replacing the header, so the first entry is attacker-supplied and trivially
+  spoofable. **Confirmed by live adversarial testing (2026-09-14)**: hitting the app directly
+  (bypassing Caddy) with a unique spoofed `X-Forwarded-For` per request defeats every
+  `ip_rate_limit` route completely — 20/20 spoofed login attempts went through uncapped. This
+  isn't externally exploitable *as currently deployed* (`docker-compose.yml` only `expose`s the
+  `app` service, doesn't `ports:` it, so only Caddy is internet-reachable) but it's an unenforced
+  trust assumption in application code, not infrastructure — it breaks the moment the app is
+  reachable another way (debug port, internal network, staging exposed directly). If a second
+  proxy is ever added in front of Caddy, or the app becomes reachable without one, this needs a
+  trusted-hop-count, not a hardcoded `[-1]`.
+- The fixed-window rate limiter's boundary-doubling (a client can burst up to `limit` right
+  before a window expires, then `limit` again right after — see the comment in
+  `redis_rate_limiter.py`) was confirmed live, not just theoretical: ~2x the configured limit is
+  achievable in a short span straddling a window boundary. Accepted tradeoff for now (simplicity
+  over a sliding-window/token-bucket implementation); don't be surprised if it shows up in load
+  testing.
+- Putting `ip_rate_limit` on `GET /api/db/get-chapters` means that endpoint, previously a pure DB
+  read with zero Redis dependency, now fails closed (500, after a ~3s Upstash timeout) if Redis is
+  unreachable. Accepted tradeoff (rate-limiting the one fully-open endpoint outweighs a rare
+  outage), but worth knowing if `get-chapters` ever starts 500ing in a way that correlates with
+  Redis/Upstash incidents rather than the DB.
+- `/auth/login`'s per-account lockout (`FailedAttemptLimiter`/`RedisFailedAttemptLimiter`, keyed
+  `f"login:{email}"` in `AuthService.login_user`) is deliberately a *separate* interface from
+  `OTPStore`, not a repurposing of the OTP attempt/lockout methods — the two are unrelated domains
+  (login attempts vs. OTP verification) and conflating them was flagged as confusing during review.
+  The route normalizes `form_data.username` with `.lower().strip()` before it reaches the lockout
+  key, matching every other auth route — this was originally missed (login was the one auth route
+  that didn't normalize), which would have let an attacker cycle email case/whitespace variants to
+  get a fresh lockout bucket each time. It didn't produce a live bypass because Supabase's user
+  lookup is exact-match, but fix the normalization first if that lookup is ever made
+  case-insensitive.
