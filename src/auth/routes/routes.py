@@ -34,9 +34,13 @@ async def register_user(user: UserRegister, auth_service: AuthService = Depends(
     return await auth_service.register_user(user=user)
 
 
-@auth_routes.post('/login', response_model=Token)
+@auth_routes.post(
+    '/login',
+    response_model=Token,
+    dependencies=[Depends(ip_rate_limit("login", limit=15, window_seconds=900))],
+)
 async def login_user(form_data: OAuth2PasswordRequestForm = Depends(), auth_service: AuthService = Depends(get_auth_service)):
-    email = form_data.username
+    email = form_data.username.lower().strip()
     password = form_data.password
     return await auth_service.login_user(email=email, password=password)
 
@@ -53,7 +57,10 @@ async def send_verification_email(
     purpose = email_req.purpose
     return await auth_service.send_verification_email(email=email, purpose=purpose)
 
-@auth_routes.post("/verify-otp")
+@auth_routes.post(
+    "/verify-otp",
+    dependencies=[Depends(ip_rate_limit("verify-otp", limit=20, window_seconds=3600))],
+)
 async def verify_otp(
     data: OTPVerification,
     auth_service: AuthService = Depends(get_auth_service)
@@ -65,7 +72,10 @@ async def verify_otp(
 
 
 
-@auth_routes.post("/reset-password")
+@auth_routes.post(
+    "/reset-password",
+    dependencies=[Depends(ip_rate_limit("reset-password", limit=10, window_seconds=3600))],
+)
 async def reset_password(
     data: ResetPasswordRequest,
     auth_service: AuthService = Depends(get_auth_service)

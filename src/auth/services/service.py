@@ -3,6 +3,7 @@ import secrets
 from src.auth.email_template import render_otp_email
 from src.auth.interface.interface import AuthInterface
 from src.auth.interface.otp_store import OTPStore
+from src.auth.interface.attempt_limiter import FailedAttemptLimiter
 from src.auth.user_schemas import UserRegister, OTPPurpose
 from src.db.interfaces.interface import UserRepository
 from src.exception.exceptions import RateLimitError, InternalServerError_, ValidationError_, AuthError
@@ -11,11 +12,12 @@ from src.mail.interfaces.interface import EmailService
 
 
 class AuthService:
-    def __init__(self, auth: AuthInterface, email_service: EmailService, otp_store: OTPStore, user_repo : UserRepository):
+    def __init__(self, auth: AuthInterface, email_service: EmailService, otp_store: OTPStore, user_repo : UserRepository, attempt_limiter: FailedAttemptLimiter):
         self.auth = auth
         self.email_service = email_service
         self.otp_store = otp_store
         self.user_repo = user_repo
+        self.attempt_limiter = attempt_limiter
 
     @staticmethod
     def _generate_otp(length: int = 6):
@@ -34,7 +36,19 @@ class AuthService:
         return new_user
 
     async def login_user(self, email: str, password: str):
-        token = await self.auth.authenticate_user(email=email, password=password)
+        key = f"login:{email}"
+        if await self.attempt_limiter.is_locked_out(key):
+            raise RateLimitError(message="Too many failed login attempts. Please try again after 15 minutes.", email=email)
+
+        try:
+            token = await self.auth.authenticate_user(email=email, password=password)
+        except AuthError:
+            locked = await self.attempt_limiter.register_failure(key, max_attempts=5, window_seconds=900, lock_seconds=900)
+            if locked:
+                raise RateLimitError(message="Too many failed login attempts. Please try again after 15 minutes.", email=email)
+            raise
+
+        await self.attempt_limiter.reset(key)
         return token
 
     async def send_verification_email(self, email: str, purpose : OTPPurpose):

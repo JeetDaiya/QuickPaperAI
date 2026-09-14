@@ -14,9 +14,11 @@ from src.base_settings import settings
 from src.auth.interface.interface import AuthInterface
 from src.auth.interface.otp_store import OTPStore
 from src.auth.interface.rate_limiter import IPRateLimiter
+from src.auth.interface.attempt_limiter import FailedAttemptLimiter
 from src.auth.adapters.custom_auth_service import CustomAuthAdapter
 from src.auth.adapters.redis_otp_store import RedisOTPStore
 from src.auth.adapters.redis_rate_limiter import RedisIPRateLimiter
+from src.auth.adapters.redis_attempt_limiter import RedisFailedAttemptLimiter
 from src.db.interfaces.interface import UserRepository, PaperRepository, ChunkRepository
 from src.db.dependencies import get_user_repository, get_paper_repository, get_chunk_repository
 from src.exception.exceptions import PermissionError_, RateLimitError
@@ -26,6 +28,7 @@ from src.paper.quota import first_n_chapter_names
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='auth/login', auto_error=False)
 otp_store: Optional[OTPStore] = None
 ip_rate_limiter: Optional[IPRateLimiter] = None
+attempt_limiter: Optional[FailedAttemptLimiter] = None
 
 
 @lru_cache
@@ -48,6 +51,17 @@ def get_ip_rate_limiter() -> IPRateLimiter:
         return ip_rate_limiter
     else:
         return ip_rate_limiter
+
+
+@lru_cache
+def get_attempt_limiter() -> FailedAttemptLimiter:
+    global attempt_limiter
+    if attempt_limiter is None:
+        redis_client = Redis(url=settings.UPSTASH_REDIS_REST_URL, token=settings.UPSTASH_REDIS_REST_TOKEN)
+        attempt_limiter = RedisFailedAttemptLimiter(redis_client=redis_client)
+        return attempt_limiter
+    else:
+        return attempt_limiter
 
 
 def get_client_ip(request: Request) -> str:
@@ -94,13 +108,15 @@ def get_auth_service(
         email_service : EmailService =  Depends(get_email_service),
         otp_storage : OTPStore = Depends(get_otp_store),
         auth : AuthInterface = Depends(get_authentication_adapter),
-        user_repo : UserRepository = Depends(get_user_repository)
+        user_repo : UserRepository = Depends(get_user_repository),
+        attempt_limiter : FailedAttemptLimiter = Depends(get_attempt_limiter)
 ) -> AuthService:
     return AuthService(
         email_service=email_service,
         otp_store=otp_storage,
         auth=auth,
-        user_repo=user_repo
+        user_repo=user_repo,
+        attempt_limiter=attempt_limiter
     )
 
 
